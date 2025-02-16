@@ -14,18 +14,20 @@ services:
         target: /mcserver/config
         volume:
           nocopy: true
+        read_only: true
       - type: volume
         source: mcworld
         target: /mcserver/world
         volume:
           nocopy: true
-  infrared:
+  mc-proxy:
     build:
       context: .
-      dockerfile: infrared.Dockerfile
+      dockerfile: mc-proxy.Dockerfile
     ports:
       - 100.126.72.77:25565:25565
     volumes:
       - type: bind
-        source: mc-proxies/imobul.us.yaml
+        source: mc-proxies
         target: /infrared/proxies
+        read_only: true
