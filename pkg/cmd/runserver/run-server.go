@@ -20,14 +20,14 @@ import (
 type PropertiesOverrides map[string]string
 
 type Config struct {
-	ServerProperties PropertiesOverrides `yaml:"server properties"`
-	MaxMemory        string              `yaml:"max memory"`
-	CommandsPort     int                 `yaml:"commands port"`
+	ServerProperties   PropertiesOverrides `yaml:"server properties"`
+	MaxMemoryGigabytes int                 `yaml:"max memory gigabytes"`
+	CommandsPort       int                 `yaml:"commands port"`
 }
 
 var DefaultConfig = Config{
-	MaxMemory:    "4G",
-	CommandsPort: 8080,
+	MaxMemoryGigabytes: 4,
+	CommandsPort:       8080,
 }
 
 func updateProperties(propertiesPath string, overrides PropertiesOverrides) error {
@@ -72,7 +72,7 @@ func configure(cfg Config, propertiesPath string) error {
 }
 
 type serverHandler struct {
-	commandsWriter io.Writer
+	commandsWriter *io.PipeWriter
 	ctx            context.Context
 	cancelFunc     context.CancelFunc
 }
@@ -80,9 +80,9 @@ type serverHandler struct {
 func constructCommand(commandBytes []byte) []byte {
 	commandString := string(commandBytes)
 	if strings.HasPrefix(commandString, "/") {
-		return []byte(commandString)
+		return []byte(commandString + "\n")
 	}
-	return []byte("/say " + commandString)
+	return []byte("/say " + commandString + "\n")
 }
 
 func (handler *serverHandler) handleCommand(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +120,7 @@ func (handler *serverHandler) handle(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 }
 
-func serveCommands(cfg Config, commandsWriter io.Writer, ctx context.Context, cancel context.CancelFunc) {
+func serveCommands(cfg Config, commandsWriter *io.PipeWriter, ctx context.Context, cancel context.CancelFunc) {
 	handler := &serverHandler{
 		commandsWriter: commandsWriter,
 		ctx:            ctx,
@@ -163,9 +163,8 @@ func interruptAndKill(cmd *exec.Cmd, timeout time.Duration) {
 
 func runserver(cfg Config) {
 	cmdArgs := []string{
-		"java",
-		"-Xmx" + cfg.MaxMemory,
-		"-jar", "fabric.jar",
+		"java", fmt.Sprintf("-Xmx%dG", cfg.MaxMemoryGigabytes),
+		"-jar", "fabric.jar", "--nogui",
 	}
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	cmd.Stdout = os.Stdout

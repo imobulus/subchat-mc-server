@@ -19,6 +19,13 @@ services:
         target: /mcserver/world
         volume:
           nocopy: true
+  infrared:
+    build:
+      context: .
+      dockerfile: infrared.Dockerfile
     ports:
       - 100.126.72.77:25565:25565
-      - 100.126.72.77:8080:8080
+    volumes:
+      - type: bind
+        source: mc-proxies/imobul.us.yaml
+        target: /infrared/proxies

@@ -1,0 +1,6 @@
+domains:
+  - "imobul.us"
+  - "wsl"
+
+addresses:
+  - mc-server:25565

@@ -1,4 +1,4 @@
-max memory: 8G
+max memory gigabytes: 8
 commands port: 8080
 server properties:
   difficulty: hard
