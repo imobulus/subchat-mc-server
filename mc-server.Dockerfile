@@ -22,8 +22,6 @@ ADD --link https://meta.fabricmc.net/v2/versions/loader/$MC_VERSION/$FABRIC_LOAD
 COPY --from=mods /mcserver/ ./
 RUN java -Xmx2G -jar fabric.jar nogui
 RUN echo eula=true > eula.txt
-VOLUME world
 COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
-VOLUME config
 
 CMD ["./runserver", "--config", "config/server-config.yaml", "--properties", "server.properties"]

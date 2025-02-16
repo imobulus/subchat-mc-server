@@ -1,10 +1,24 @@
 name: subchat-mc-server
 
+volumes:
+  mcworld:
+
 services:
   mc-server:
-    image: mc-server
     build:
-      context: minecraft-server
+      context: .
+      dockerfile: mc-server.Dockerfile
     volumes:
-      - ./minecraft-server/config:/mcserver/config
-      - /home/imobulus/mcworld:/mcserver/world
+      - type: bind
+        source: minecraft-server/config
+        target: /mcserver/config
+        volume:
+          nocopy: true
+      - type: volume
+        source: mcworld
+        target: /mcserver/world
+        volume:
+          nocopy: true
+    ports:
+      - 100.126.72.77:25565:25565
+      - 100.126.72.77:8080:8080
