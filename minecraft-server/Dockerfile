@@ -6,6 +6,12 @@ RUN mkdir mods clientmods
 ADD --link https://cdn.modrinth.com/data/P7dR8mSH/versions/3WOjLgFJ/fabric-api-0.116.1%2B1.21.4.jar mods/fabric-api.jar
 RUN cp mods/fabric-api.jar clientmods
 
+FROM golang:1.23.4 AS runscript
+WORKDIR /build
+COPY pkg/ pkg/
+WORKDIR /build/pkg/cmd/runserver
+RUN go build -o runserver .
+
 FROM openjdk:$JDK_VERSION-jdk-slim AS build-mc-server
 ARG \
   MC_VERSION=1.21.4 \
@@ -15,8 +21,9 @@ WORKDIR /mcserver
 ADD --link https://meta.fabricmc.net/v2/versions/loader/$MC_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar fabric.jar
 COPY --from=mods /mcserver/ ./
 RUN java -Xmx2G -jar fabric.jar nogui
-COPY server-conf/server.properties .
 RUN echo eula=true > eula.txt
 VOLUME world
+COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
+VOLUME config
 
-CMD ["java", "-Xmx8G", "-jar", "fabric.jar"]
+CMD ["./runserver", "--config", "config/server-config.yaml", "--properties", "server.properties"]
