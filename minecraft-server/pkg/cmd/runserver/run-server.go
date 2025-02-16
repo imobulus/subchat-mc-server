@@ -22,7 +22,7 @@ type PropertiesOverrides map[string]string
 type Config struct {
 	ServerProperties PropertiesOverrides `yaml:"server properties"`
 	MaxMemory        string              `yaml:"max memory"`
-	CommandsPort     int                 `yaml:"cpmmands port"`
+	CommandsPort     int                 `yaml:"commands port"`
 }
 
 var DefaultConfig = Config{
@@ -55,7 +55,11 @@ func updateProperties(propertiesPath string, overrides PropertiesOverrides) erro
 	for k, v := range overridesCopy {
 		contentLines = append(contentLines, k+"="+v)
 	}
-	err = os.WriteFile(propertiesPath, []byte(strings.Join(contentLines, "\n")), 0664)
+	content := strings.Join(contentLines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	err = os.WriteFile(propertiesPath, []byte(content), 0664)
 	if err != nil {
 		return errors.Wrapf(err, "cannot write file %s", propertiesPath)
 	}
@@ -199,8 +203,9 @@ func runserver(cfg Config) {
 }
 
 func main() {
-	confpath := flag.String("config", "server-config.yaml", "psth to server config file")
+	confpath := flag.String("config", "config/server-config.yaml", "psth to server config file")
 	propertiesPath := flag.String("properties", "server.properties", "psth to server properties file")
+	norun := flag.Bool("norun", false, "do not run server")
 	flag.Parse()
 	configBytes, err := os.ReadFile(*confpath)
 	if err != nil {
@@ -214,6 +219,9 @@ func main() {
 	err = configure(cfg, *propertiesPath)
 	if err != nil {
 		log.Fatalf("cannot configure: %s", err.Error())
+	}
+	if *norun {
+		return
 	}
 	runserver(cfg)
 }

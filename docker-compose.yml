@@ -1,0 +1,10 @@
+name: subchat-mc-server
+
+services:
+  mc-server:
+    image: mc-server
+    build:
+      context: minecraft-server
+    volumes:
+      - ./minecraft-server/config:/mcserver/config
+      - /home/imobulus/mcworld:/mcserver/world

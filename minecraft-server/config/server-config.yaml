@@ -1,3 +1,6 @@
 max memory: 8G
+commands port: 8080
 server properties:
-  dummy-opt: opt value
+  difficulty: hard
+  motd: Subchat Server
+  spawn-protection: "0"
