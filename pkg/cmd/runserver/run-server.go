@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -79,10 +80,13 @@ type serverHandler struct {
 
 func constructCommand(commandBytes []byte) []byte {
 	commandString := string(commandBytes)
-	if strings.HasPrefix(commandString, "/") {
-		return []byte(commandString + "\n")
+	if !strings.HasSuffix(commandString, "\n") {
+		commandString += "\n"
 	}
-	return []byte("/say " + commandString + "\n")
+	if strings.HasPrefix(commandString, "/") {
+		return []byte(commandString)
+	}
+	return []byte("/say " + commandString)
 }
 
 func (handler *serverHandler) handleCommand(w http.ResponseWriter, r *http.Request) {
@@ -161,6 +165,31 @@ func interruptAndKill(cmd *exec.Cmd, timeout time.Duration) {
 	cmd.Process.Kill()
 }
 
+func startProcessInput(commandsPipeIn *io.PipeWriter, ctx context.Context) {
+	go func() {
+		inbuf := bufio.NewReader(os.Stdin)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			command, err := inbuf.ReadString('\n')
+			if err == io.EOF {
+				fmt.Println("EOF")
+				return
+			}
+			if err != nil {
+				log.Fatalf("cannot read command: %v", err)
+			}
+			_, err = commandsPipeIn.Write(constructCommand([]byte(command)))
+			if err != nil {
+				log.Fatalf("cannot write to pipe: %v", err)
+			}
+		}
+	}()
+}
+
 func runserver(cfg Config) {
 	cmdArgs := []string{
 		"java", fmt.Sprintf("-Xmx%dG", cfg.MaxMemoryGigabytes),
@@ -181,6 +210,7 @@ func runserver(cfg Config) {
 		defer wg.Done()
 		serveCommands(cfg, commandsPipeIn, ctx, cancel)
 	}()
+	startProcessInput(commandsPipeIn, ctx)
 	wg.Add(1)
 	go func() {
 		defer cancel()

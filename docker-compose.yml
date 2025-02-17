@@ -8,10 +8,14 @@ services:
     build:
       context: .
       dockerfile: mc-server.Dockerfile
+    ports:
+      - 100.126.72.77:8080:8080
+    stdin_open: true
+    tty: true
     volumes:
       - type: bind
         source: minecraft-server/config
-        target: /mcserver/config
+        target: /mcserver/external-server-config
         volume:
           nocopy: true
         read_only: true

@@ -5,6 +5,8 @@ WORKDIR /mcserver
 RUN mkdir mods clientmods
 ADD --link https://cdn.modrinth.com/data/P7dR8mSH/versions/3WOjLgFJ/fabric-api-0.116.1%2B1.21.4.jar mods/fabric-api.jar
 RUN cp mods/fabric-api.jar clientmods
+ADD --link https://cdn.modrinth.com/data/aZj58GfX/versions/cNfqAFbs/easyauth-mc1.21.2-3.0.27.jar mods/easyauth.jar
+ADD --link https://cdn.modrinth.com/data/Vebnzrzj/versions/6h9SnsZu/LuckPerms-Fabric-5.4.150.jar mods/luckperms.jar
 
 FROM golang:1.23.4 AS runscript
 WORKDIR /build
@@ -19,9 +21,11 @@ ARG \
   FABRIC_INSTALLER_VERSION=1.0.1
 WORKDIR /mcserver
 ADD --link https://meta.fabricmc.net/v2/versions/loader/$MC_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar fabric.jar
-COPY --from=mods /mcserver/ ./
-RUN java -Xmx2G -jar fabric.jar nogui
+# initial run to download the server
 RUN echo eula=true > eula.txt
+RUN java -Xmx2G -jar fabric.jar --nogui --initSettings
+COPY --from=mods /mcserver/ ./
 COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
+COPY minecraft-server/easyauth.json mods/EasyAuth/config.json
 
-CMD ["./runserver", "--config", "config/server-config.yaml", "--properties", "server.properties"]
+CMD ["./runserver", "--config", "external-server-config/server-config.yaml", "--properties", "server.properties"]
