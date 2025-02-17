@@ -2,6 +2,7 @@ name: subchat-mc-server
 
 volumes:
   mcworld:
+  easyauth-storage:
 
 services:
   mc-server:
@@ -22,6 +23,11 @@ services:
       - type: volume
         source: mcworld
         target: /mcserver/world
+        volume:
+          nocopy: true
+      - type: volume
+        source: easyauth-storage
+        target: /mcserver/mods/EasyAuth/levelDBStore
         volume:
           nocopy: true
   mc-proxy:
