@@ -1,0 +1,2 @@
+/lp group default permission set easyauth.commands.register false
+/say Server started

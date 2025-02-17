@@ -28,4 +28,4 @@ COPY --from=mods /mcserver/ ./
 COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
 COPY minecraft-server/easyauth.json mods/EasyAuth/config.json
 
-CMD ["./runserver", "--config", "external-server-config/server-config.yaml", "--properties", "server.properties"]
+CMD ["./runserver", "--config", "external-server-config/server-config.yaml"]

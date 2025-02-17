@@ -71,7 +71,7 @@ func main() {
 		logger.Error(fmt.Sprintf("cannot read file %s: %s", *confpath, err.Error()))
 		os.Exit(1)
 	}
-	var config mcserver.Config
+	config := mcserver.DefaultConfig
 	err = yaml.Unmarshal(configBytes, &config)
 	if err != nil {
 		logger.Error(fmt.Sprintf("cannot unmarshal config %s: %s", *confpath, err.Error()))

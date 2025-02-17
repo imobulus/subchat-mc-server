@@ -37,6 +37,7 @@ type McProcessHolder struct {
 	cmdDone chan struct{}
 	logger  *zap.Logger
 	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func NewMcProcessHolder(config McProcessConfig, logger *zap.Logger) *McProcessHolder {
@@ -49,7 +50,7 @@ func NewMcProcessHolder(config McProcessConfig, logger *zap.Logger) *McProcessHo
 }
 
 func (m *McProcessHolder) Start(ctx context.Context) error {
-	m.ctx = ctx
+	m.ctx, m.cancel = context.WithCancel(ctx)
 	if m.command != nil {
 		return fmt.Errorf("process already started")
 	}
@@ -61,6 +62,12 @@ func (m *McProcessHolder) Done() <-chan struct{} {
 }
 
 func (m *McProcessHolder) start() error {
+	success := false
+	defer func() {
+		if !success {
+			m.cancel()
+		}
+	}()
 	cmdArgs := []string{
 		"java", fmt.Sprintf("-Xmx%dG", m.config.MaxMemoryGigabytes),
 		"-jar", "fabric.jar", "--nogui",
@@ -77,9 +84,16 @@ func (m *McProcessHolder) start() error {
 	if err != nil {
 		return err
 	}
-	m.command = cmd
 	go m.waitEnd()
 	go m.watchContext()
+
+	err = m.scheduleStartupCommands()
+	if err != nil {
+		return errors.Wrap(err, "cannot schedule startup commands")
+	}
+
+	m.command = cmd
+	success = true
 	return nil
 }
 
@@ -100,29 +114,53 @@ func (m *McProcessHolder) watchContext() {
 	processutil.InterruptAndKill(m.command, m.config.KillJavaTimeout)
 }
 
+func (m *McProcessHolder) scheduleStartupCommands() error {
+	if m.config.StartupCommandsPath == "" {
+		return nil
+	}
+	startupCommands, err := os.ReadFile(m.config.StartupCommandsPath)
+	if err != nil {
+		return errors.Wrap(err, "cannot read startup commands file")
+	}
+	go func() {
+		err = m.Exec(string(startupCommands))
+		if err != nil {
+			m.logger.Error("cannot execute startup commands", zap.Error(err))
+			m.cancel()
+		}
+	}()
+	return nil
+}
+
 // Executes command. If command does not start with "/", it is prefixed with "/say "
-func (m *McProcessHolder) Exec(command string) error {
-	if !strings.HasPrefix(command, "/") {
-		command = "/say " + command
-	}
-	if !strings.HasSuffix(command, "\n") {
-		command += "\n"
-	}
+func (m *McProcessHolder) Exec(commands string) error {
 	m.cmdMu.Lock()
 	defer m.cmdMu.Unlock()
-	writeWaiter := make(chan struct{})
-	var err error
-	go func() {
-		_, err = m.commandsPipe.Write([]byte(command))
-		close(writeWaiter)
-	}()
-	select {
-	case <-writeWaiter:
-	case <-m.ctx.Done():
-		return m.ctx.Err()
-	}
-	if err != nil {
-		return errors.Wrap(err, "cannot write to pipe")
+	for _, command := range strings.Split(commands, "\n") {
+		if strings.TrimSpace(command) == "" {
+			continue
+		}
+		if !strings.HasPrefix(command, "/") {
+			command = "/say " + command
+		}
+		if !strings.HasSuffix(command, "\n") {
+			command += "\n"
+		}
+		m.logger.Info("executing command " + command)
+		writeWaiter := make(chan struct{})
+		var err error
+		go func() {
+			_, err = m.commandsPipe.Write([]byte(command))
+			close(writeWaiter)
+		}()
+		select {
+		case <-writeWaiter:
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		}
+		if err != nil {
+			return errors.Wrap(err, "cannot write to pipe")
+		}
 	}
 	return nil
 }
