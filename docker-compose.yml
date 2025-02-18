@@ -2,7 +2,14 @@ name: subchat-mc-server
 
 volumes:
   mcworld:
+  mclists:
   easyauth-storage:
+
+configs:
+  mcconfig:
+    file: ./minecraft-server/server-config.yaml
+  mcstartup:
+    file: ./minecraft-server/startup-commands.txt
 
 services:
   mc-server:
@@ -13,16 +20,21 @@ services:
       - 100.126.72.77:8080:8080
     stdin_open: true
     tty: true
+    # command: bash    
+    configs:
+      - source: mcconfig
+        target: /mcserver/server-config.yaml
+      - source: mcstartup
+        target: /mcserver/startup-commands.txt
     volumes:
-      - type: bind
-        source: minecraft-server/config
-        target: /mcserver/external-server-config
-        volume:
-          nocopy: true
-        read_only: true
       - type: volume
         source: mcworld
         target: /mcserver/world
+        volume:
+          nocopy: true
+      - type: volume
+        source: mclists
+        target: /mcserver/player-lists
         volume:
           nocopy: true
       - type: volume

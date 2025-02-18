@@ -1,6 +1,6 @@
 java process config:
   max memory gigabytes: 8
-  startup commands path: /mcserver/external-server-config/startup-commands.txt
+  startup commands path: startup-commands.txt
 commands port: 8080
 server properties:
   difficulty: hard

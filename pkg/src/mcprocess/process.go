@@ -62,12 +62,10 @@ func (m *McProcessHolder) Done() <-chan struct{} {
 }
 
 func (m *McProcessHolder) start() error {
-	success := false
-	defer func() {
-		if !success {
-			m.cancel()
-		}
-	}()
+	startupCommands, err := os.ReadFile(m.config.StartupCommandsPath)
+	if err != nil {
+		return errors.Wrap(err, "cannot read startup commands file")
+	}
 	cmdArgs := []string{
 		"java", fmt.Sprintf("-Xmx%dG", m.config.MaxMemoryGigabytes),
 		"-jar", "fabric.jar", "--nogui",
@@ -80,20 +78,14 @@ func (m *McProcessHolder) start() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Start()
+	err = cmd.Start()
 	if err != nil {
 		return err
 	}
+	m.command = cmd
 	go m.waitEnd()
 	go m.watchContext()
-
-	err = m.scheduleStartupCommands()
-	if err != nil {
-		return errors.Wrap(err, "cannot schedule startup commands")
-	}
-
-	m.command = cmd
-	success = true
+	go m.scheduleStartupCommands(string(startupCommands))
 	return nil
 }
 
@@ -114,22 +106,12 @@ func (m *McProcessHolder) watchContext() {
 	processutil.InterruptAndKill(m.command, m.config.KillJavaTimeout)
 }
 
-func (m *McProcessHolder) scheduleStartupCommands() error {
-	if m.config.StartupCommandsPath == "" {
-		return nil
-	}
-	startupCommands, err := os.ReadFile(m.config.StartupCommandsPath)
+func (m *McProcessHolder) scheduleStartupCommands(startupCommands string) {
+	err := m.Exec(startupCommands)
 	if err != nil {
-		return errors.Wrap(err, "cannot read startup commands file")
+		m.logger.Error("cannot execute startup commands", zap.Error(err))
+		m.cancel()
 	}
-	go func() {
-		err = m.Exec(string(startupCommands))
-		if err != nil {
-			m.logger.Error("cannot execute startup commands", zap.Error(err))
-			m.cancel()
-		}
-	}()
-	return nil
 }
 
 // Executes command. If command does not start with "/", it is prefixed with "/say "

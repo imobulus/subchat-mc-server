@@ -27,5 +27,10 @@ RUN java -Xmx2G -jar fabric.jar --nogui --initSettings
 COPY --from=mods /mcserver/ ./
 COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
 COPY minecraft-server/easyauth.json mods/EasyAuth/config.json
+VOLUME /mcserver/player-lists
+RUN CONFFILES="banned-ips.json banned-players.json ops.json usercache.json whitelist.json"; \
+  for file in $CONFFILES; do \
+    ln -s /mcserver/player-lists/$file $file; \
+  done
 
-CMD ["./runserver", "--config", "external-server-config/server-config.yaml"]
+CMD ["./runserver", "--config", "server-config.yaml"]
