@@ -85,7 +85,7 @@ func (m *McProcessHolder) start() error {
 	m.command = cmd
 	go m.waitEnd()
 	go m.watchContext()
-	go m.scheduleStartupCommands(string(startupCommands))
+	m.scheduleStartupCommands(string(startupCommands))
 	return nil
 }
 
@@ -107,17 +107,25 @@ func (m *McProcessHolder) watchContext() {
 }
 
 func (m *McProcessHolder) scheduleStartupCommands(startupCommands string) {
-	err := m.Exec(startupCommands)
-	if err != nil {
-		m.logger.Error("cannot execute startup commands", zap.Error(err))
-		m.cancel()
-	}
+	m.cmdMu.Lock()
+	go func() {
+		defer m.cmdMu.Unlock()
+		err := m.exec(startupCommands)
+		if err != nil {
+			m.logger.Error("cannot execute startup commands", zap.Error(err))
+			m.cancel()
+		}
+	}()
 }
 
 // Executes command. If command does not start with "/", it is prefixed with "/say "
 func (m *McProcessHolder) Exec(commands string) error {
 	m.cmdMu.Lock()
 	defer m.cmdMu.Unlock()
+	return m.exec(commands)
+}
+
+func (m *McProcessHolder) exec(commands string) error {
 	for _, command := range strings.Split(commands, "\n") {
 		if strings.TrimSpace(command) == "" {
 			continue
