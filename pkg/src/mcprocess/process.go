@@ -130,17 +130,17 @@ func (m *McProcessHolder) exec(commands string) error {
 		if strings.TrimSpace(command) == "" {
 			continue
 		}
+		command = strings.TrimSpace(command)
 		if !strings.HasPrefix(command, "/") {
 			command = "/say " + command
-		}
-		if !strings.HasSuffix(command, "\n") {
-			command += "\n"
 		}
 		m.logger.Info("executing command " + command)
 		writeWaiter := make(chan struct{})
 		var err error
 		go func() {
-			_, err = m.commandsPipe.Write([]byte(command))
+			cmd := []byte(command)
+			cmd = append(cmd, '\n')
+			_, err = m.commandsPipe.Write(cmd)
 			close(writeWaiter)
 		}()
 		select {

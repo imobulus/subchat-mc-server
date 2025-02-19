@@ -144,7 +144,6 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	s.logger.Info("executing command " + string(commandBytes))
 	err = s.javaProcess.Exec(string(commandBytes))
 	if err != nil {
 		s.logger.Error("cannot exec command "+string(commandBytes), zap.Error(err))

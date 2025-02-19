@@ -12,7 +12,7 @@ FROM golang:1.23.4 AS runscript
 WORKDIR /build
 COPY pkg/ pkg/
 WORKDIR /build/pkg/cmd/runserver
-RUN go build -o runserver .
+RUN --mount=type=cache,target=/go/pkg go build -o runserver .
 
 FROM openjdk:$JDK_VERSION-jdk-slim AS build-mc-server
 ARG \
