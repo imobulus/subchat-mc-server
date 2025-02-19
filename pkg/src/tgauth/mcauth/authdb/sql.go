@@ -1,6 +1,7 @@
 package authdb
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"regexp"
 	"time"
@@ -9,8 +10,30 @@ import (
 	"gorm.io/gorm"
 )
 
+type ActorId uint
 type TgUserId int64
-type TgChatlId int64
+type TgChatId int64
+
+// Scan implements the Scanner interface for TgChatId
+func (t *TgChatId) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case int64:
+		*t = TgChatId(v)
+	default:
+		return fmt.Errorf("cannot scan type %T into TgChatId", value)
+	}
+	return nil
+}
+
+// Value implements the driver Valuer interface for TgChatId
+func (t TgChatId) Value() (driver.Value, error) {
+	return int64(t), nil
+}
+
 type MinecraftLogin string
 
 var minecraftLoginRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]{3,16}$`)
@@ -31,7 +54,10 @@ func MakeMinecraftLogin(s string) (MinecraftLogin, error) {
 }
 
 type Actor struct {
-	gorm.Model
+	ID                ActorId `gorm:"primarykey"`
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeletedAt         gorm.DeletedAt `gorm:"index"`
 	Nickname          string
 	Description       string
 	IsAdmin           bool
@@ -44,10 +70,22 @@ type Actor struct {
 	CustomMinecraftLoginLimit *int
 }
 
+type TgChat struct {
+	ID TgChatId
+}
+
+type ActorSeenInChats struct {
+	TgChatID  TgChatId `gorm:"primarykey"`
+	ActorID   uint     `gorm:"primarykey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
 // table bans
 type Ban struct {
 	gorm.Model
-	ActorID     uint
+	ActorID     ActorId
 	BanDuration time.Duration
 	Reason      string
 }
@@ -58,19 +96,11 @@ type TgUser struct {
 	UpdatedAt    time.Time
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
 	LastSeenInfo tgbotapi.User  `gorm:"serializer:json"`
-	ActorID      uint
+	ActorID      ActorId
 }
 
 func ShortDescribeTgUser(u tgbotapi.User) string {
 	return fmt.Sprintf("ID %d %s", u.ID, u.String())
-}
-
-type TgChat struct {
-	ID               TgChatlId `gorm:"primarykey"` // tg chat id
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	DeletedAt        gorm.DeletedAt `gorm:"index"`
-	LastSeenChatInfo tgbotapi.Chat  `gorm:"serializer:json"`
 }
 
 type MinecraftAccount struct {
@@ -78,13 +108,12 @@ type MinecraftAccount struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
-	ActorID   uint
+	ActorID   ActorId
 }
 
 // used for AutoMigrate
 var allSchemas = []interface{}{
 	&Actor{},
 	&TgUser{},
-	&TgChat{},
 	&Ban{},
 }

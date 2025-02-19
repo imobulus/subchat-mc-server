@@ -1,6 +1,7 @@
 package authdb
 
 import (
+	"os"
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -9,6 +10,7 @@ import (
 )
 
 func TestDbInteractions(t *testing.T) {
+	os.Remove("test.db")
 	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to open db: %v", err)
@@ -34,7 +36,7 @@ func TestDbInteractions(t *testing.T) {
 	if user.LastSeenInfo.FirstName != "Test" || user.LastSeenInfo.LastName != "User" {
 		t.Fatalf("Wrong user info: %v", user)
 	}
-	actor := Actor{Model: gorm.Model{ID: user.ActorID}, TgAccounts: []TgUser{}}
+	actor := Actor{ID: user.ActorID, TgAccounts: []TgUser{}}
 	err = executor.GetActor(&actor)
 	if err != nil {
 		t.Fatalf("Failed to find actor: %v", err)
@@ -50,5 +52,13 @@ func TestDbInteractions(t *testing.T) {
 	}
 	if actor.TgAccounts[0].ID != 1 {
 		t.Fatalf("Wrong actor info: %v", actor)
+	}
+	err = executor.SeenInChat(actor.ID, 1)
+	if err != nil {
+		t.Fatalf("Failed to update seen in chat: %v", err)
+	}
+	err = executor.SeenInChat(actor.ID, 1)
+	if err != nil {
+		t.Fatalf("Failed to update seen in chat: %v", err)
 	}
 }

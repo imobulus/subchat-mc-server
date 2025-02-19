@@ -6,11 +6,13 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 type AuthDbExecutor struct {
-	db *gorm.DB
+	db     *gorm.DB
+	logger *zap.Logger
 }
 
 func NewAuthDbExecutor(db *gorm.DB) *AuthDbExecutor {
@@ -18,7 +20,11 @@ func NewAuthDbExecutor(db *gorm.DB) *AuthDbExecutor {
 }
 
 func (authdb *AuthDbExecutor) InitDB() error {
-	err := authdb.db.AutoMigrate(allSchemas...)
+	err := authdb.db.SetupJoinTable(&Actor{}, "SeenInChats", &ActorSeenInChats{})
+	if err != nil {
+		return errors.Wrap(err, "fail to setup join table")
+	}
+	err = authdb.db.AutoMigrate(allSchemas...)
 	if err != nil {
 		return errors.Wrap(err, "fail to auto migrate schemas")
 	}
@@ -35,7 +41,16 @@ func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.Wrapf(err, "fail to find tg user %s", ShortDescribeTgUser(tguser))
 		}
-		return errors.Wrap(authdb.createTgUser(tguser), "calling create on update")
+		err := authdb.createTgUser(tguser)
+		if err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				// only possible when a new user sends initial messages too fast
+				authdb.logger.Warn("encountered UpdateTgUserInfo race, it is abnormal")
+				return nil
+			}
+			return errors.Wrap(err, "calling create on update")
+		}
+		return nil
 	}
 	user.ID = TgUserId(tguser.ID)
 	// user found
@@ -67,7 +82,7 @@ func (authdb *AuthDbExecutor) createTgUser(tguser tgbotapi.User) error {
 }
 
 // 0 duration means unlimited
-func (authdb *AuthDbExecutor) BanActor(actorId uint, duration time.Duration, reason string) {
+func (authdb *AuthDbExecutor) BanActor(actorId ActorId, duration time.Duration, reason string) {
 	ban := Ban{
 		ActorID:     actorId,
 		BanDuration: duration,
@@ -112,6 +127,14 @@ func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
 	return nil
 }
 
+func (authdb *AuthDbExecutor) GetActorChats(actor *Actor) error {
+	err := authdb.db.Model(actor).Select("seen_in_chats").First(actor).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to get actor %d chats", actor.ID)
+	}
+	return nil
+}
+
 func (authdb *AuthDbExecutor) GetTgUser(user *TgUser) error {
 	if user.ID == 0 {
 		return errors.New("tg user id is not set")
@@ -132,7 +155,7 @@ func (e ErrorLoginTaken) Error() string {
 }
 
 // adds minecraft login to actor. Each login must only belong to single actor.
-func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId uint, login MinecraftLogin) error {
+func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login MinecraftLogin) error {
 	minecraftAccount := MinecraftAccount{
 		ID:      login,
 		ActorID: actorId,
@@ -143,6 +166,53 @@ func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId uint, login MinecraftLog
 			return ErrorLoginTaken{login}
 		}
 		return errors.Wrapf(err, "fail to create minecraft account %s for actor %d", login, actorId)
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) RemoveMinecraftAccount(login MinecraftLogin) error {
+	account := &MinecraftAccount{ID: login}
+	err := authdb.db.Delete(account).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to remove minecraft account %s", login)
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) SeenInChat(actorId ActorId, chatId TgChatId) error {
+	actor := Actor{ID: actorId}
+	authdb.db.Model(&actor).Association("SeenInChats").Append(&TgChat{ID: chatId})
+	return nil
+}
+
+func (authdb *AuthDbExecutor) VerifiedByAdmin(actorId ActorId, adminId ActorId) error {
+	actor := Actor{ID: actorId}
+	err := authdb.GetActor(&actor)
+	if err != nil {
+		return errors.Wrap(err, "failed to get actor")
+	}
+	admin := Actor{ID: adminId}
+	err = authdb.GetActor(&admin)
+	if err != nil {
+		return errors.Wrap(err, "failed to get admin")
+	}
+	err = authdb.db.Model(&actor).Association("VerifiedByAdmins").Append(&admin)
+	if err != nil {
+		return errors.Wrap(err, "failed to update actor")
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) GetActorByTgUser(tguser TgUserId, actor *Actor) error {
+	tgAcc := &TgUser{ID: tguser}
+	err := authdb.db.First(tgAcc).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to get actor by tg user %d", tguser)
+	}
+	actor.ID = tgAcc.ActorID
+	err = authdb.db.First(actor).Error
+	if err != nil {
+		return errors.Wrap(err, "failed to get actor")
 	}
 	return nil
 }
