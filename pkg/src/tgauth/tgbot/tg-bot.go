@@ -26,6 +26,10 @@ type TgBotConfig struct {
 	Debug bool `yaml:"debug"`
 }
 
+var DefaultTgBotConfig = TgBotConfig{
+	Debug: false,
+}
+
 type TgBotSecret struct {
 	Token string `json:"token"`
 }
@@ -43,6 +47,7 @@ type TgBot struct {
 
 func NewTgBot(
 	config TgBotConfig, secret TgBotSecret,
+	permsEngine *permsengine.ServerPermsEngine,
 	logger *zap.Logger, ctx context.Context,
 ) (*TgBot, error) {
 	api, err := tgbotapi.NewBotAPI(secret.Token)
@@ -55,6 +60,7 @@ func NewTgBot(
 	tgBot := TgBot{
 		api:             api,
 		chatHandlersMap: make(map[int64]*ChatHandler),
+		permsEngine:     permsEngine,
 		logger:          logger,
 		ctx:             ctx,
 		cancel:          cancel,

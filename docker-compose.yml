@@ -10,6 +10,10 @@ configs:
     file: ./minecraft-server/server-config.yaml
   mcstartup:
     file: ./minecraft-server/startup-commands.txt
+  
+secrets:
+  tgbot-secret:
+    file: ./secrets/tgbot.json
 
 services:
   mc-server:
