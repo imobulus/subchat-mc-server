@@ -40,6 +40,9 @@ type TgBot struct {
 	chatHandlersMap map[int64]*ChatHandler
 	permsEngine     *permsengine.ServerPermsEngine
 
+	doneC chan struct{}
+	wg    *sync.WaitGroup
+
 	logger *zap.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -61,6 +64,8 @@ func NewTgBot(
 		api:             api,
 		chatHandlersMap: make(map[int64]*ChatHandler),
 		permsEngine:     permsEngine,
+		doneC:           make(chan struct{}),
+		wg:              &sync.WaitGroup{},
 		logger:          logger,
 		ctx:             ctx,
 		cancel:          cancel,
@@ -72,6 +77,10 @@ func (bot *TgBot) Run() error {
 	return bot.runUpdatesLoop()
 }
 
+func (bot *TgBot) Done() <-chan struct{} {
+	return bot.doneC
+}
+
 func (bot *TgBot) runUpdatesLoop() error {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -81,17 +90,32 @@ func (bot *TgBot) runUpdatesLoop() error {
 		return err
 	}
 
-	time.Sleep(time.Millisecond * 500)
-	updates.Clear()
+	updatesProxy := make(chan tgbotapi.Update)
 	go func() {
+		defer close(updatesProxy)
 		for {
 			select {
 			case <-bot.ctx.Done():
 				return
 			case update := <-updates:
-				bot.handleUpdate(update)
+				updatesProxy <- update
 			}
 		}
+	}()
+
+	time.Sleep(time.Millisecond * 500)
+	updates.Clear()
+	bot.wg.Add(1)
+	go func() {
+		defer bot.wg.Done()
+		for update := range updatesProxy {
+			bot.logger.Debug("Received update", zap.Any("update", update))
+			bot.handleUpdate(update)
+		}
+	}()
+	go func() {
+		bot.wg.Wait()
+		close(bot.doneC)
 	}()
 	return nil
 }
@@ -117,7 +141,9 @@ func (bot *TgBot) handleUpdate(update tgbotapi.Update) {
 		bot.chatHandlersMap[chat.ID] = chatHandler
 	}
 	chatHandler.handlerMx.Lock()
+	bot.wg.Add(1)
 	go func() {
+		defer bot.wg.Done()
 		defer chatHandler.handlerMx.Unlock()
 		bot.handleChatMessageUpdate(chatHandler, &update)
 	}()

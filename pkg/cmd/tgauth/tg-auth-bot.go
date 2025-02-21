@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
@@ -44,8 +43,10 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		<-signalChan
-		cancel()
+		for range signalChan {
+			logger.Info("Received signal, shutting down")
+			cancel()
+		}
 	}()
 
 	configPath := flag.String("config", "config.yaml", "path to config file")
@@ -77,13 +78,17 @@ func main() {
 		logger.Fatal("Failed to open db", zap.Error(err))
 	}
 
-	permsEngine := permsengine.NewServerPermsEngine(config.Perms, authdb.NewAuthDbExecutor(db))
+	dbExec, err := authdb.NewAuthDbExecutor(db, logger)
+	if err != nil {
+		logger.Fatal("Failed to init db", zap.Error(err))
+	}
+
+	permsEngine := permsengine.NewServerPermsEngine(config.Perms, dbExec)
 	tgBot, err := tgbot.NewTgBot(config.TgBot, tgSecret, permsEngine, logger, ctx)
 	if err != nil {
 		logger.Fatal("Failed to create tg bot", zap.Error(err))
 	}
 	tgBot.Run()
 
-	<-ctx.Done()
-	time.Sleep(2 * time.Second)
+	<-tgBot.Done()
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -15,8 +16,8 @@ func TestDbInteractions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open db: %v", err)
 	}
-	executor := NewAuthDbExecutor(db)
-	err = executor.InitDB()
+	logger := zap.Must(zap.NewDevelopment())
+	executor, err := NewAuthDbExecutor(db, logger)
 	if err != nil {
 		t.Fatalf("Failed to init db: %v", err)
 	}

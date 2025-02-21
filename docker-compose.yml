@@ -4,6 +4,7 @@ volumes:
   mcworld:
   mclists:
   easyauth-storage:
+  bot-db:
 
 configs:
   mcconfig:
@@ -57,3 +58,15 @@ services:
         source: mc-proxies
         target: /infrared/proxies
         read_only: true
+  tg-bot:
+    build:
+      context: .
+      dockerfile: tg-bot.Dockerfile
+    secrets:
+      - tgbot-secret
+    volumes:
+      - type: volume
+        source: bot-db
+        target: /sqlite
+        volume:
+          nocopy: true

@@ -15,11 +15,20 @@ type AuthDbExecutor struct {
 	logger *zap.Logger
 }
 
-func NewAuthDbExecutor(db *gorm.DB) *AuthDbExecutor {
-	return &AuthDbExecutor{db: db}
+func NewAuthDbExecutor(db *gorm.DB, logger *zap.Logger) (*AuthDbExecutor, error) {
+	dbExec := &AuthDbExecutor{
+		db:     db,
+		logger: logger,
+	}
+	err := dbExec.InitDB()
+	if err != nil {
+		return nil, errors.Wrap(err, "fail to init db")
+	}
+	return dbExec, nil
 }
 
 func (authdb *AuthDbExecutor) InitDB() error {
+	authdb.logger.Info("initializing db")
 	err := authdb.db.SetupJoinTable(&Actor{}, "SeenInChats", &ActorSeenInChats{})
 	if err != nil {
 		return errors.Wrap(err, "fail to setup join table")
@@ -34,13 +43,17 @@ func (authdb *AuthDbExecutor) InitDB() error {
 // updates tg user info if it exists. Creates new user if not.
 // May throw an error in case of two simultaneous creations, the user is still created.
 func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
+	authdb.logger.Debug("updating tg user info", zap.Any("user", tguser))
 	// find if user exists
-	var user TgUser
-	err := authdb.db.First(&user, tguser.ID).Error
+	var users []TgUser
+	err := authdb.db.Find(&users, tguser.ID).Error
 	if err != nil {
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.Wrapf(err, "fail to find tg user %s", ShortDescribeTgUser(tguser))
-		}
+		return errors.Wrapf(err, "fail to find tg user %s", ShortDescribeTgUser(tguser))
+	}
+	if len(users) > 1 {
+		return errors.Errorf("found more than one tg user %s", ShortDescribeTgUser(tguser))
+	}
+	if len(users) == 0 {
 		err := authdb.createTgUser(tguser)
 		if err != nil {
 			if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -52,6 +65,7 @@ func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
 		}
 		return nil
 	}
+	user := users[0]
 	user.ID = TgUserId(tguser.ID)
 	// user found
 	err = authdb.db.Model(&user).Updates(TgUser{
@@ -64,6 +78,7 @@ func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
 }
 
 func (authdb *AuthDbExecutor) createTgUser(tguser tgbotapi.User) error {
+	authdb.logger.Debug("creating tg user", zap.Any("user", tguser))
 	actor := Actor{
 		Nickname:    "",
 		Description: fmt.Sprintf("Telegram user %s", ShortDescribeTgUser(tguser)),
@@ -83,6 +98,7 @@ func (authdb *AuthDbExecutor) createTgUser(tguser tgbotapi.User) error {
 
 // 0 duration means unlimited
 func (authdb *AuthDbExecutor) BanActor(actorId ActorId, duration time.Duration, reason string) {
+	authdb.logger.Debug("banning actor", zap.Uint("actor_id", uint(actorId)), zap.Duration("duration", duration), zap.String("reason", reason))
 	ban := Ban{
 		ActorID:     actorId,
 		BanDuration: duration,
@@ -92,11 +108,13 @@ func (authdb *AuthDbExecutor) BanActor(actorId ActorId, duration time.Duration, 
 }
 
 func (authdb *AuthDbExecutor) UnbanActor(actorId uint) {
+	authdb.logger.Debug("unbanning actor", zap.Uint("actor_id", actorId))
 	authdb.db.Where("actor_id = ?", actorId).Delete(&Ban{})
 }
 
 // populates association fields which are non-nil
 func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
+	authdb.logger.Debug("getting actor", zap.Uint("actor_id", uint(actor.ID)))
 	if actor.ID == 0 {
 		return errors.New("actor id is not set")
 	}
@@ -128,6 +146,7 @@ func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
 }
 
 func (authdb *AuthDbExecutor) GetActorChats(actor *Actor) error {
+	authdb.logger.Debug("getting actor chats", zap.Uint("actor_id", uint(actor.ID)))
 	err := authdb.db.Model(actor).Select("seen_in_chats").First(actor).Error
 	if err != nil {
 		return errors.Wrapf(err, "fail to get actor %d chats", actor.ID)
@@ -136,6 +155,7 @@ func (authdb *AuthDbExecutor) GetActorChats(actor *Actor) error {
 }
 
 func (authdb *AuthDbExecutor) GetTgUser(user *TgUser) error {
+	authdb.logger.Debug("getting tg user", zap.Uint("tg_user_id", uint(user.ID)))
 	if user.ID == 0 {
 		return errors.New("tg user id is not set")
 	}
@@ -156,6 +176,7 @@ func (e ErrorLoginTaken) Error() string {
 
 // adds minecraft login to actor. Each login must only belong to single actor.
 func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login MinecraftLogin) error {
+	authdb.logger.Debug("adding minecraft login", zap.Uint("actor_id", uint(actorId)), zap.String("login", string(login)))
 	minecraftAccount := MinecraftAccount{
 		ID:      login,
 		ActorID: actorId,
@@ -170,7 +191,8 @@ func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login Minecraft
 	return nil
 }
 
-func (authdb *AuthDbExecutor) RemoveMinecraftAccount(login MinecraftLogin) error {
+func (authdb *AuthDbExecutor) RemoveMinecraftLogin(login MinecraftLogin) error {
+	authdb.logger.Debug("removing minecraft login", zap.String("login", string(login)))
 	account := &MinecraftAccount{ID: login}
 	err := authdb.db.Delete(account).Error
 	if err != nil {
@@ -180,12 +202,14 @@ func (authdb *AuthDbExecutor) RemoveMinecraftAccount(login MinecraftLogin) error
 }
 
 func (authdb *AuthDbExecutor) SeenInChat(actorId ActorId, chatId TgChatId) error {
+	authdb.logger.Debug("marking actor as seen in chat", zap.Uint("actor_id", uint(actorId)), zap.Uint("chat_id", uint(chatId)))
 	actor := Actor{ID: actorId}
 	authdb.db.Model(&actor).Association("SeenInChats").Append(&TgChat{ID: chatId})
 	return nil
 }
 
 func (authdb *AuthDbExecutor) VerifiedByAdmin(actorId ActorId, adminId ActorId) error {
+	authdb.logger.Debug("marking actor as verified by admin", zap.Uint("actor_id", uint(actorId)), zap.Uint("admin_id", uint(adminId)))
 	actor := Actor{ID: actorId}
 	err := authdb.GetActor(&actor)
 	if err != nil {
@@ -204,6 +228,7 @@ func (authdb *AuthDbExecutor) VerifiedByAdmin(actorId ActorId, adminId ActorId) 
 }
 
 func (authdb *AuthDbExecutor) GetActorByTgUser(tguser TgUserId, actor *Actor) error {
+	authdb.logger.Debug("getting actor by tg user", zap.Uint("tg_user_id", uint(tguser)))
 	tgAcc := &TgUser{ID: tguser}
 	err := authdb.db.First(tgAcc).Error
 	if err != nil {
