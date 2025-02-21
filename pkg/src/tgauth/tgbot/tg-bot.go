@@ -2,18 +2,21 @@ package tgbot
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
+	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"
 	"go.uber.org/zap"
 )
 
 type InteractiveHandler interface {
 	InitialHandle(update *tgbotapi.Update)
-	HandleUpdate(update *tgbotapi.Update) InteractiveHandler
+	HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) InteractiveHandler
 }
 
 type ChatHandler struct {
@@ -159,15 +162,46 @@ func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat) *ChatHandler {
 	return nil
 }
 
+func (bot *TgBot) HandleUpdateError(update *tgbotapi.Update, err error) {
+	bot.logger.Error(fmt.Sprintf("Failed to handle update id %d", update.UpdateID), zap.Error(err))
+	if update.Message != nil && update.Message.Chat != nil && update.Message.Chat.Type == tgtypes.PrivateChatType {
+		bot.SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+			"Что-то пошло не так, отправьте ID %d администратору", update.UpdateID,
+		)))
+	}
+}
+
 func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbotapi.Update) {
 	chatHandler.lastUpdateTime = time.Now()
-	if update.Message.From != nil {
-		bot.permsEngine.UpdateTgUserInfo(*update.Message.From)
+	if update.Message.From == nil {
+		// don't handle fromless updates yet
+		bot.logger.Debug("update.Message.From is nil")
+		return
+	}
+	actor := &authdb.Actor{}
+	err := bot.permsEngine.UpdateTgUserInfo(*update.Message.From)
+	if err != nil {
+		bot.HandleUpdateError(update, err)
+		return
+	}
+	bot.permsEngine.GetActorByTgUser(authdb.TgUserId(update.Message.From.ID), actor)
+	if update.Message.Chat.Type == tgtypes.GroupChatType || update.Message.Chat.Type == tgtypes.SupergroupChatType {
+		err := bot.permsEngine.SeenInChat(actor.ID, authdb.TgChatId(update.Message.Chat.ID))
+		if err != nil {
+			bot.HandleUpdateError(update, err)
+			return
+		}
 	}
 	if chatHandler.currentHandler == nil {
-		chatHandler.currentHandler = &DefaultHandler{bot: bot}
+		switch update.Message.Chat.Type {
+		case tgtypes.PrivateChatType:
+			chatHandler.currentHandler = NewPrivateChatHandler(bot)
+		default:
+			bot.logger.Debug("chat type is not implemented", zap.String("chatType", update.Message.Chat.Type))
+			return
+		}
 	}
-	chatHandler.currentHandler = chatHandler.currentHandler.HandleUpdate(update)
+	chatHandler.currentHandler = chatHandler.currentHandler.HandleUpdate(update, actor)
 }
 
 func (bot *TgBot) SendLog(conf tgbotapi.MessageConfig) {

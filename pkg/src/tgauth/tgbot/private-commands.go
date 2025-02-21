@@ -13,21 +13,25 @@ func (handler *AbortHandleWrapper) InitialHandle(update *tgbotapi.Update) {
 	handler.Handler.InitialHandle(update)
 }
 
-func (handler *AbortHandleWrapper) HandleUpdate(update *tgbotapi.Update) InteractiveHandler {
+func (handler *AbortHandleWrapper) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) InteractiveHandler {
 	if update.Message.Command() == "/abort" {
 		return nil
 	}
-	return handler.Handler.HandleUpdate(update)
+	return handler.Handler.HandleUpdate(update, actor)
 }
 
-type DefaultHandler struct {
+type PrivateChatHandler struct {
 	bot *TgBot
 }
 
-func (handler *DefaultHandler) InitialHandle(update *tgbotapi.Update) {
+func NewPrivateChatHandler(bot *TgBot) *PrivateChatHandler {
+	return &PrivateChatHandler{bot: bot}
 }
 
-func (handler *DefaultHandler) HandleUpdate(update *tgbotapi.Update) InteractiveHandler {
+func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update) {
+}
+
+func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) InteractiveHandler {
 	command := update.Message.Command()
 	switch command {
 	case "/add_minecraft_login":
@@ -53,15 +57,13 @@ func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update) 
 	}
 }
 
-func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update) InteractiveHandler {
+func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) InteractiveHandler {
 	login, err := authdb.MakeMinecraftLogin(update.Message.Text)
 	if err != nil {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, err.Error())
 		handler.bot.SendLog(msg)
 	}
 	handler.MinecraftLogin = login
-	actor := &authdb.Actor{}
-	handler.bot.permsEngine.GetActorByTgUser(authdb.TgUserId(update.Message.From.ID), actor)
 	handler.bot.permsEngine.AddMinecraftLogin(actor.ID, handler.MinecraftLogin)
 	return nil
 }
