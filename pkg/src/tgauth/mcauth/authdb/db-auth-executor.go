@@ -118,22 +118,28 @@ func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
 	if actor.ID == 0 {
 		return errors.New("actor id is not set")
 	}
-	preloadFields := []string{}
-	if actor.SeenInChats != nil {
-		preloadFields = append(preloadFields, "SeenInChats")
+	preloadFields := []string{
+		"SeenInChats",
+		"VerifiedByAdmins",
+		"Bans",
+		"TgAccounts",
+		"MinecraftAccounts",
 	}
-	if actor.VerifiedByAdmins != nil {
-		preloadFields = append(preloadFields, "VerifiedByAdmins")
-	}
-	if actor.Bans != nil {
-		preloadFields = append(preloadFields, "Bans")
-	}
-	if actor.TgAccounts != nil {
-		preloadFields = append(preloadFields, "TgAccounts")
-	}
-	if actor.MinecraftAccounts != nil {
-		preloadFields = append(preloadFields, "MinecraftAccounts")
-	}
+	// if actor.SeenInChats != nil {
+	// 	preloadFields = append(preloadFields, "SeenInChats")
+	// }
+	// if actor.VerifiedByAdmins != nil {
+	// 	preloadFields = append(preloadFields, "VerifiedByAdmins")
+	// }
+	// if actor.Bans != nil {
+	// 	preloadFields = append(preloadFields, "Bans")
+	// }
+	// if actor.TgAccounts != nil {
+	// 	preloadFields = append(preloadFields, "TgAccounts")
+	// }
+	// if actor.MinecraftAccounts != nil {
+	// 	preloadFields = append(preloadFields, "MinecraftAccounts")
+	// }
 	modelDb := authdb.db.Model(actor)
 	for _, field := range preloadFields {
 		modelDb = modelDb.Preload(field)
@@ -180,9 +186,8 @@ func (e ErrorLoginTaken) Is(target error) bool {
 }
 
 func (authdb *AuthDbExecutor) OptionalGetMinecraftAccount(login MinecraftLogin) (*MinecraftAccount, error) {
-	authdb.logger.Debug("adding minecraft login", zap.String("login", string(login)))
 	var minecraftAccounts []MinecraftAccount
-	err := authdb.db.Model(&MinecraftAccount{ID: login}).Find(&minecraftAccounts).Error
+	err := authdb.db.Find(&minecraftAccounts, login).Error
 	if err != nil {
 		return nil, errors.Wrapf(err, "fail to find minecraft account %s", login)
 	}
@@ -257,7 +262,7 @@ func (authdb *AuthDbExecutor) GetActorByTgUser(tguser TgUserId, actor *Actor) er
 		return errors.Wrapf(err, "fail to get actor by tg user %d", tguser)
 	}
 	actor.ID = tgAcc.ActorID
-	err = authdb.db.First(actor).Error
+	err = authdb.GetActor(actor)
 	if err != nil {
 		return errors.Wrap(err, "failed to get actor")
 	}

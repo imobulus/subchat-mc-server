@@ -94,6 +94,11 @@ func (e ErrorExceededMaxMinecraftLogins) Error() string {
 	return fmt.Sprintf("exceeded max minecraft logins, current: %d, max: %d", e.CurrentNumber, e.MaxLogins)
 }
 
+func (e ErrorExceededMaxMinecraftLogins) Is(target error) bool {
+	_, ok := target.(ErrorExceededMaxMinecraftLogins)
+	return ok
+}
+
 func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	actorId authdb.ActorId,
 ) error {
@@ -106,6 +111,7 @@ func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	if actor.CustomMinecraftLoginLimit != nil {
 		limit = *actor.CustomMinecraftLoginLimit
 	}
+	fmt.Println("limit is ", limit)
 	if limit >= 0 && len(actor.MinecraftAccounts) >= limit {
 		return ErrorExceededMaxMinecraftLogins{
 			CurrentNumber: len(actor.MinecraftAccounts),

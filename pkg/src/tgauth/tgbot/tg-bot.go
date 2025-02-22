@@ -15,7 +15,7 @@ import (
 )
 
 type InteractiveHandler interface {
-	InitialHandle(update *tgbotapi.Update) error
+	InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error)
 	HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error)
 	GetCommands() []tgtypes.BotCommand
 	GetHelpDescription() string
@@ -254,7 +254,13 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 		bot.logger.Debug("update.Message.From is nil")
 		return
 	}
-	actor := &authdb.Actor{}
+	actor := &authdb.Actor{
+		SeenInChats:       []authdb.TgChat{},
+		VerifiedByAdmins:  []*authdb.Actor{},
+		Bans:              []authdb.Ban{},
+		TgAccounts:        []authdb.TgUser{},
+		MinecraftAccounts: []authdb.MinecraftAccount{},
+	}
 	err := bot.permsEngine.UpdateTgUserInfo(*update.Message.From)
 	if err != nil {
 		bot.HandleUpdateError(update, err)
@@ -286,9 +292,14 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 	if newHandler == nil {
 		return
 	}
-	err = newHandler.InitialHandle(update)
+	newHandler, err = newHandler.InitialHandle(update, actor)
 	if err != nil {
 		bot.HandleUnexpectedError(update, err)
+		return
+	}
+	chatHandler.currentHandler = newHandler
+	if newHandler == nil {
+		return
 	}
 }
 

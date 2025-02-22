@@ -3,9 +3,11 @@ package tgbot
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
+	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"
 )
 
@@ -17,8 +19,8 @@ func NewPrivateChatHandler(bot *TgBot) *PrivateChatHandler {
 	return &PrivateChatHandler{bot: bot}
 }
 
-func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update) error {
-	return nil
+func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	return handler, nil
 }
 
 func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
@@ -48,26 +50,55 @@ type AddMinecraftLoginHandler struct {
 	initialized bool
 }
 
-func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update) error {
+func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	if !handler.initialized {
 		handler.initialized = true
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите ник")
+		loginStrings := make([]string, 0, len(actor.MinecraftAccounts))
+		for _, acc := range actor.MinecraftAccounts {
+			loginStrings = append(loginStrings, string(acc.ID))
+		}
+		limitReached := false
+		replyBuilder := strings.Builder{}
+		if len(loginStrings) > 0 {
+			replyBuilder.WriteString("Ваши аккаунты:\n")
+			for _, login := range loginStrings {
+				replyBuilder.WriteString(login)
+				replyBuilder.WriteRune('\n')
+			}
+			replyBuilder.WriteRune('\n')
+		} else {
+			replyBuilder.WriteString("У вас нет зарегистрированных аккаунтов\n\n")
+		}
+		err := handler.bot.permsEngine.CheckAddMinecraftLoginPermission(actor.ID)
+		if err != nil {
+			if errors.Is(err, permsengine.ErrorExceededMaxMinecraftLogins{}) {
+				limitReached = true
+				replyBuilder.WriteString("Превышен лимит зарегистрированных аккаунтов, возврат в главное меню")
+			} else {
+				return handler, err
+			}
+		} else {
+			replyBuilder.WriteString("Введите аккаунт")
+		}
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, replyBuilder.String())
 		// msg.ReplyMarkup = tgbotapi.ForceReply{ForceReply: true, Selective: true}
 		handler.bot.SendLog(msg)
+		if limitReached {
+			return nil, nil
+		}
 	}
-	return nil
+	return handler, nil
 }
 
 func (handler *AddMinecraftLoginHandler) handleLoginExists(update *tgbotapi.Update, login authdb.MinecraftLogin) {
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Ник %s уже занят, введите другой", login))
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Аккаунт %s уже занят, введите другой", login))
 	handler.bot.SendLog(msg)
-
 }
 
 func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	login, err := authdb.MakeMinecraftLogin(update.Message.Text)
 	if err != nil {
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Ник содержит недопустимые символы или слишком короткий или длинный, введите другой")
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт содержит недопустимые символы или слишком короткий или длинный, введите другой")
 		handler.bot.SendLog(msg)
 		return handler, nil
 	}
@@ -77,7 +108,7 @@ func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, a
 	}
 	if maybeAccount != nil {
 		if maybeAccount.ActorID == actor.ID {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Вы уже зарегистрировали этот ник")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Вы уже зарегистрировали этот аккаунт")
 			handler.bot.SendLog(msg)
 			return nil, nil
 		}
@@ -89,6 +120,11 @@ func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, a
 		if errors.Is(err, authdb.ErrorLoginTaken{}) {
 			handler.handleLoginExists(update, login)
 			return handler, nil
+		}
+		if errors.Is(err, permsengine.ErrorExceededMaxMinecraftLogins{}) {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Превышен лимит зарегистрированных аккаунтов")
+			handler.bot.SendLog(msg)
+			return nil, nil
 		}
 		return nil, err
 	}

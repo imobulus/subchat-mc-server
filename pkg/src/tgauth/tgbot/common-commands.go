@@ -25,22 +25,23 @@ func (err ErrUnknownCommand) Is(target error) bool {
 }
 
 type CommonHandleWrapper struct {
-	Handler InteractiveHandler
+	Handler InteractiveHandler // must not be nil
 }
 
 func NewCommonHandleWrapper(handler InteractiveHandler) *CommonHandleWrapper {
 	return &CommonHandleWrapper{Handler: handler}
 }
 
-func (handler *CommonHandleWrapper) GetBot() *TgBot {
-	return handler.Handler.GetBot()
-}
-
-func (handler *CommonHandleWrapper) InitialHandle(update *tgbotapi.Update) error {
-	if handler.Handler == nil {
-		return nil
+func (handler *CommonHandleWrapper) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	newHandler, err := handler.Handler.InitialHandle(update, actor)
+	if err != nil {
+		return handler, err
 	}
-	return handler.Handler.InitialHandle(update)
+	if newHandler == nil {
+		return nil, nil
+	}
+	handler.Handler = newHandler
+	return handler, nil
 }
 
 func (handler *CommonHandleWrapper) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
@@ -63,6 +64,9 @@ func (handler *CommonHandleWrapper) HandleUpdate(update *tgbotapi.Update, actor 
 		}
 		return nil, err
 	}
+	if newHandler == nil {
+		return nil, nil
+	}
 	handler.Handler = newHandler
 	return handler, nil
 }
@@ -72,9 +76,7 @@ func (handler *CommonHandleWrapper) GetCommands() []tgtypes.BotCommand {
 		{Command: "help", Description: "Показать список команд"},
 		{Command: "abort", Description: "Вернуться в главное меню"},
 	}
-	if handler.Handler != nil {
-		thisCommands = append(thisCommands, handler.Handler.GetCommands()...)
-	}
+	thisCommands = append(thisCommands, handler.Handler.GetCommands()...)
 	return thisCommands
 }
 
@@ -106,12 +108,11 @@ func (handler *CommonHandleWrapper) getHelpText() string {
 }
 
 func (handler *CommonHandleWrapper) HandleHelp(update *tgbotapi.Update) {
-	handler.Handler.GetBot().SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, handler.getHelpText()))
+	handler.GetBot().SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, handler.getHelpText()))
 }
 
 func (handler *CommonHandleWrapper) HandleAbort(update *tgbotapi.Update) {
 	handler.GetBot().SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, "Ок"))
-	handler.Handler = nil
 }
 
 func (handler *CommonHandleWrapper) HandleUnknownCommand(update *tgbotapi.Update, err error) {
@@ -124,4 +125,8 @@ func (handler *CommonHandleWrapper) HandleUnknownCommand(update *tgbotapi.Update
 	}
 	textB.WriteString(handler.getAvailableCommandsText())
 	handler.GetBot().SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, textB.String()))
+}
+
+func (handler *CommonHandleWrapper) GetBot() *TgBot {
+	return handler.Handler.GetBot()
 }
