@@ -174,6 +174,11 @@ func (e ErrorLoginTaken) Error() string {
 	return fmt.Sprintf("Login %s is already taken", e.Login)
 }
 
+func (e ErrorLoginTaken) Is(target error) bool {
+	_, ok := target.(ErrorLoginTaken)
+	return ok
+}
+
 // adds minecraft login to actor. Each login must only belong to single actor.
 func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login MinecraftLogin) error {
 	authdb.logger.Debug("adding minecraft login", zap.Uint("actor_id", uint(actorId)), zap.String("login", string(login)))

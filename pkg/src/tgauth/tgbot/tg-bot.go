@@ -15,14 +15,30 @@ import (
 )
 
 type InteractiveHandler interface {
-	InitialHandle(update *tgbotapi.Update)
-	HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) InteractiveHandler
+	InitialHandle(update *tgbotapi.Update) error
+	HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error)
+	GetCommands() []tgtypes.BotCommand
+	GetHelpDescription() string
+	GetBot() *TgBot
+}
+
+type InteractiveSessionId struct {
+	ChatId int64
+	UserId int64
 }
 
 type ChatHandler struct {
+	id             InteractiveSessionId
 	handlerMx      *sync.Mutex
 	currentHandler InteractiveHandler
 	lastUpdateTime time.Time
+}
+
+func (handler *ChatHandler) GetScope() *tgtypes.BotCommandScope {
+	scopeEntry := tgtypes.NewBotCommandScopeChatMember(handler.id.ChatId, handler.id.UserId)
+	return &tgtypes.BotCommandScope{
+		ChatMember: scopeEntry,
+	}
 }
 
 type TgBotConfig struct {
@@ -40,7 +56,8 @@ type TgBotSecret struct {
 type TgBot struct {
 	api *tgbotapi.BotAPI
 
-	chatHandlersMap map[int64]*ChatHandler
+	chatHandlersMap map[InteractiveSessionId]*ChatHandler
+	chatHandlersMx  *sync.Mutex
 	permsEngine     *permsengine.ServerPermsEngine
 
 	doneC chan struct{}
@@ -65,7 +82,8 @@ func NewTgBot(
 	ctx, cancel := context.WithCancel(ctx)
 	tgBot := TgBot{
 		api:             api,
-		chatHandlersMap: make(map[int64]*ChatHandler),
+		chatHandlersMap: make(map[InteractiveSessionId]*ChatHandler),
+		chatHandlersMx:  &sync.Mutex{},
 		permsEngine:     permsEngine,
 		doneC:           make(chan struct{}),
 		wg:              &sync.WaitGroup{},
@@ -134,27 +152,54 @@ func (bot *TgBot) handleUpdate(update tgbotapi.Update) {
 		return
 	}
 	chat := message.Chat
-	chatHandler, ok := bot.chatHandlersMap[chat.ID]
+	if message.From == nil {
+		return
+	}
+	from := message.From
+	sessionId := InteractiveSessionId{
+		ChatId: chat.ID,
+		UserId: int64(from.ID),
+	}
+	bot.chatHandlersMx.Lock()
+	chatHandler, ok := bot.chatHandlersMap[sessionId]
 	if !ok {
-		chatHandler = bot.createChatHandler(chat)
+		chatHandler = bot.createChatHandler(chat, from, sessionId)
 		if chatHandler == nil {
 			bot.logger.Error("chatHandler is nil")
+			bot.chatHandlersMx.Unlock()
 			return
 		}
-		bot.chatHandlersMap[chat.ID] = chatHandler
+		bot.chatHandlersMap[sessionId] = chatHandler
 	}
 	chatHandler.handlerMx.Lock()
+	bot.chatHandlersMx.Unlock()
 	bot.wg.Add(1)
 	go func() {
 		defer bot.wg.Done()
-		defer chatHandler.handlerMx.Unlock()
 		bot.handleChatMessageUpdate(chatHandler, &update)
+		bot.handleNewInteractiveCommands(chatHandler, &update)
+		chatHandler.handlerMx.Unlock()
+		bot.handleCleanup(chatHandler)
 	}()
 }
 
-func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat) *ChatHandler {
+func (bot *TgBot) handleCleanup(chatHandler *ChatHandler) {
+	bot.chatHandlersMx.Lock()
+	defer bot.chatHandlersMx.Unlock()
+	// we locked the map. If this lock succeeds it means that handler is not in use and we can check if it has nil handler
+	isFree := chatHandler.handlerMx.TryLock()
+	if isFree {
+		defer chatHandler.handlerMx.Unlock()
+		if chatHandler.currentHandler == nil {
+			delete(bot.chatHandlersMap, chatHandler.id)
+		}
+	}
+}
+
+func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat, from *tgbotapi.User, id InteractiveSessionId) *ChatHandler {
 	if chat.Type == "private" {
 		return &ChatHandler{
+			id:        id,
 			handlerMx: &sync.Mutex{},
 		}
 	}
@@ -201,12 +246,48 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 			return
 		}
 	}
-	chatHandler.currentHandler = chatHandler.currentHandler.HandleUpdate(update, actor)
+	newHandler, err := chatHandler.currentHandler.HandleUpdate(update, actor)
+	if err != nil {
+		bot.HandleUnexpectedError(update, err)
+		return
+	}
+	chatHandler.currentHandler = newHandler
+	if newHandler == nil {
+		return
+	}
+	err = newHandler.InitialHandle(update)
+	if err != nil {
+		bot.HandleUnexpectedError(update, err)
+	}
+}
+
+func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler, update *tgbotapi.Update) {
+	if chatHandler.currentHandler == nil {
+		err := tgtypes.DeleteMyCommands(bot.api, chatHandler.GetScope(), nil)
+		if err != nil {
+			bot.logger.Error("Failed to delete commands", zap.Error(err))
+		}
+		return
+	}
+	commands := chatHandler.currentHandler.GetCommands()
+	err := tgtypes.SetMyCommands(bot.api, commands, chatHandler.GetScope(), nil)
+	if err != nil {
+		bot.logger.Error("Failed to set commands", zap.Error(err))
+	}
 }
 
 func (bot *TgBot) SendLog(conf tgbotapi.MessageConfig) {
 	_, err := bot.api.Send(conf)
 	if err != nil {
 		bot.logger.Error("Failed to send message", zap.Error(err))
+	}
+}
+
+func (bot *TgBot) HandleUnexpectedError(update *tgbotapi.Update, err error) {
+	bot.logger.Error("Unexpected error", zap.Error(err), zap.Any("update_id", update.UpdateID))
+	if update.Message != nil && update.Message.Chat != nil && update.Message.Chat.Type == tgtypes.PrivateChatType {
+		bot.SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+			"Что-то пошло не так, отправьте код %d администратору", update.UpdateID,
+		)))
 	}
 }
