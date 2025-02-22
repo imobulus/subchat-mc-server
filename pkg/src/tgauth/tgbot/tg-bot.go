@@ -108,7 +108,6 @@ func (bot *TgBot) Run() error {
 	if err != nil {
 		return err
 	}
-	go bot.acceptLoop()
 	return bot.runUpdatesLoop()
 }
 
@@ -127,31 +126,6 @@ func (bot *TgBot) initCommands() error {
 		return err
 	}
 	return nil
-}
-
-func (bot *TgBot) acceptLoop() {
-	lastTime := time.Now()
-	tk := time.NewTicker(time.Second * 2)
-	defer tk.Stop()
-	for {
-		select {
-		case <-bot.ctx.Done():
-			return
-		case t := <-tk.C:
-			actors, err := bot.permsEngine.GetActorIdsUpdatedSince(lastTime.Add(-time.Second))
-			if err != nil {
-				bot.logger.Error("Failed to get actors", zap.Error(err))
-				continue
-			}
-			lastTime = t
-			for _, actorId := range actors {
-				err := bot.permsEngine.UpdateActorStatus(actorId, false)
-				if err != nil {
-					bot.logger.Error("Failed to update accepted status", zap.Error(err))
-				}
-			}
-		}
-	}
 }
 
 func (bot *TgBot) runUpdatesLoop() error {
@@ -300,6 +274,12 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 			return
 		}
 	}
+	defer func() {
+		err := bot.permsEngine.UpdateActorStatus(actor.ID, false)
+		if err != nil {
+			bot.HandleUpdateError(update, err)
+		}
+	}()
 	if chatHandler.currentHandler == nil {
 		switch update.Message.Chat.Type {
 		case tgtypes.PrivateChatType:
