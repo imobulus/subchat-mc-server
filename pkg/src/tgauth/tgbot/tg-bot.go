@@ -29,12 +29,19 @@ type InteractiveSessionId struct {
 
 type ChatHandler struct {
 	id             InteractiveSessionId
+	isPrivate      bool
 	handlerMx      *sync.Mutex
 	currentHandler InteractiveHandler
 	lastUpdateTime time.Time
 }
 
 func (handler *ChatHandler) GetScope() *tgtypes.BotCommandScope {
+	if handler.isPrivate {
+		scopeEntry := tgtypes.NewBotCommandScopeChat(handler.id.ChatId)
+		return &tgtypes.BotCommandScope{
+			Chat: scopeEntry,
+		}
+	}
 	scopeEntry := tgtypes.NewBotCommandScopeChatMember(handler.id.ChatId, handler.id.UserId)
 	return &tgtypes.BotCommandScope{
 		ChatMember: scopeEntry,
@@ -55,6 +62,7 @@ type TgBotSecret struct {
 
 type TgBot struct {
 	api *tgbotapi.BotAPI
+	aux *tgtypes.AuxTgApi
 
 	chatHandlersMap map[InteractiveSessionId]*ChatHandler
 	chatHandlersMx  *sync.Mutex
@@ -82,6 +90,7 @@ func NewTgBot(
 	ctx, cancel := context.WithCancel(ctx)
 	tgBot := TgBot{
 		api:             api,
+		aux:             tgtypes.NewAuxTgApi(api, logger),
 		chatHandlersMap: make(map[InteractiveSessionId]*ChatHandler),
 		chatHandlersMx:  &sync.Mutex{},
 		permsEngine:     permsEngine,
@@ -95,11 +104,28 @@ func NewTgBot(
 }
 
 func (bot *TgBot) Run() error {
+	err := bot.initCommands()
+	if err != nil {
+		return err
+	}
 	return bot.runUpdatesLoop()
 }
 
 func (bot *TgBot) Done() <-chan struct{} {
 	return bot.doneC
+}
+
+func (bot *TgBot) initCommands() error {
+	bot.aux.DeleteMyCommands(nil, nil)
+	privateHandler := MakePrivateChatHandler(bot)
+	privateCommands := privateHandler.GetCommands()
+	err := bot.aux.SetMyCommands(privateCommands, &tgtypes.BotCommandScope{
+		AllPrivateChats: tgtypes.NewBotCommandScopeAllPrivateChats(),
+	}, nil)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (bot *TgBot) runUpdatesLoop() error {
@@ -201,6 +227,7 @@ func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat, from *tgbotapi.User, id
 		return &ChatHandler{
 			id:        id,
 			handlerMx: &sync.Mutex{},
+			isPrivate: true,
 		}
 	}
 	bot.logger.Error("chat.Type is not private, NOT IMPLEMENTED")
@@ -214,6 +241,10 @@ func (bot *TgBot) HandleUpdateError(update *tgbotapi.Update, err error) {
 			"Что-то пошло не так, отправьте ID %d администратору", update.UpdateID,
 		)))
 	}
+}
+
+func MakePrivateChatHandler(bot *TgBot) InteractiveHandler {
+	return NewCommonHandleWrapper(NewPrivateChatHandler(bot))
 }
 
 func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbotapi.Update) {
@@ -240,7 +271,7 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 	if chatHandler.currentHandler == nil {
 		switch update.Message.Chat.Type {
 		case tgtypes.PrivateChatType:
-			chatHandler.currentHandler = NewPrivateChatHandler(bot)
+			chatHandler.currentHandler = MakePrivateChatHandler(bot)
 		default:
 			bot.logger.Debug("chat type is not implemented", zap.String("chatType", update.Message.Chat.Type))
 			return
@@ -263,14 +294,14 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 
 func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler, update *tgbotapi.Update) {
 	if chatHandler.currentHandler == nil {
-		err := tgtypes.DeleteMyCommands(bot.api, chatHandler.GetScope(), nil)
+		err := bot.aux.DeleteMyCommands(chatHandler.GetScope(), nil)
 		if err != nil {
 			bot.logger.Error("Failed to delete commands", zap.Error(err))
 		}
 		return
 	}
 	commands := chatHandler.currentHandler.GetCommands()
-	err := tgtypes.SetMyCommands(bot.api, commands, chatHandler.GetScope(), nil)
+	err := bot.aux.SetMyCommands(commands, chatHandler.GetScope(), nil)
 	if err != nil {
 		bot.logger.Error("Failed to set commands", zap.Error(err))
 	}

@@ -179,6 +179,23 @@ func (e ErrorLoginTaken) Is(target error) bool {
 	return ok
 }
 
+func (authdb *AuthDbExecutor) OptionalGetMinecraftAccount(login MinecraftLogin) (*MinecraftAccount, error) {
+	authdb.logger.Debug("adding minecraft login", zap.String("login", string(login)))
+	var minecraftAccounts []MinecraftAccount
+	err := authdb.db.Model(&MinecraftAccount{ID: login}).Find(&minecraftAccounts).Error
+	if err != nil {
+		return nil, errors.Wrapf(err, "fail to find minecraft account %s", login)
+	}
+	if len(minecraftAccounts) > 1 {
+		return nil, errors.Errorf("found more than one minecraft account %s", login)
+	}
+	if len(minecraftAccounts) > 0 {
+		acc := minecraftAccounts[0]
+		return &acc, nil
+	}
+	return nil, nil
+}
+
 // adds minecraft login to actor. Each login must only belong to single actor.
 func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login MinecraftLogin) error {
 	authdb.logger.Debug("adding minecraft login", zap.Uint("actor_id", uint(actorId)), zap.String("login", string(login)))

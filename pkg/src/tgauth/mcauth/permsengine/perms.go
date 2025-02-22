@@ -115,6 +115,10 @@ func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	return nil
 }
 
+func (engine *ServerPermsEngine) OptionalGetMinecraftAccount(login authdb.MinecraftLogin) (*authdb.MinecraftAccount, error) {
+	return engine.dbExecutor.OptionalGetMinecraftAccount(login)
+}
+
 // can return ErrorLoginTaken
 func (engine *ServerPermsEngine) AddMinecraftLogin(
 	actorId authdb.ActorId,

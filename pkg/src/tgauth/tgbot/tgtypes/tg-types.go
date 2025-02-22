@@ -6,6 +6,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const PrivateChatType string = "private"
@@ -145,7 +146,16 @@ func (scope *BotCommandScope) MarshalJSON() ([]byte, error) {
 	return nil, errors.New("BotCommandScope is empty")
 }
 
-func SetMyCommands(api *tgbotapi.BotAPI, commands []BotCommand, scope *BotCommandScope, languageCode *string) error {
+type AuxTgApi struct {
+	api    *tgbotapi.BotAPI
+	logger *zap.Logger
+}
+
+func NewAuxTgApi(api *tgbotapi.BotAPI, logger *zap.Logger) *AuxTgApi {
+	return &AuxTgApi{api: api, logger: logger}
+}
+
+func (api *AuxTgApi) SetMyCommands(commands []BotCommand, scope *BotCommandScope, languageCode *string) error {
 	v := url.Values{}
 	commandsJSON, err := json.Marshal(commands)
 	if err != nil {
@@ -162,11 +172,18 @@ func SetMyCommands(api *tgbotapi.BotAPI, commands []BotCommand, scope *BotComman
 	if languageCode != nil {
 		v.Add("language_code", *languageCode)
 	}
-	_, err = api.MakeRequest(methodSetMyCommands, v)
-	return err
+	api.logger.Debug("setting commands", zap.Any("args", v))
+	resp, err := api.api.MakeRequest(methodSetMyCommands, v)
+	if err != nil {
+		return errors.Wrap(err, "failed to set commands")
+	}
+	if !resp.Ok {
+		return errors.New("failed to set commands")
+	}
+	return nil
 }
 
-func DeleteMyCommands(api *tgbotapi.BotAPI, scope *BotCommandScope, languageCode *string) error {
+func (api *AuxTgApi) DeleteMyCommands(scope *BotCommandScope, languageCode *string) error {
 	v := url.Values{}
 	if scope != nil {
 		scopeJSON, err := json.Marshal(scope)
@@ -178,6 +195,13 @@ func DeleteMyCommands(api *tgbotapi.BotAPI, scope *BotCommandScope, languageCode
 	if languageCode != nil {
 		v.Add("language_code", *languageCode)
 	}
-	_, err := api.MakeRequest(methodSetMyCommands, v)
-	return err
+	api.logger.Debug("deleting commands", zap.Any("args", v))
+	resp, err := api.api.MakeRequest(methodSetMyCommands, v)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete commands")
+	}
+	if !resp.Ok {
+		return errors.New("failed to delete commands")
+	}
+	return nil
 }

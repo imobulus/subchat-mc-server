@@ -116,4 +116,5 @@ var allSchemas = []interface{}{
 	&Actor{},
 	&TgUser{},
 	&Ban{},
+	&MinecraftAccount{},
 }

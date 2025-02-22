@@ -73,7 +73,9 @@ func main() {
 		logger.Fatal("failed to parse tg secret file", zap.Error(err))
 	}
 
-	db, err := gorm.Open(sqlite.Open(config.SqliteLocation), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(config.SqliteLocation), &gorm.Config{
+		TranslateError: true,
+	})
 	if err != nil {
 		logger.Fatal("Failed to open db", zap.Error(err))
 	}

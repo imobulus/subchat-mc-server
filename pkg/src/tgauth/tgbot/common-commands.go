@@ -28,23 +28,30 @@ type CommonHandleWrapper struct {
 	Handler InteractiveHandler
 }
 
+func NewCommonHandleWrapper(handler InteractiveHandler) *CommonHandleWrapper {
+	return &CommonHandleWrapper{Handler: handler}
+}
+
 func (handler *CommonHandleWrapper) GetBot() *TgBot {
 	return handler.Handler.GetBot()
 }
 
 func (handler *CommonHandleWrapper) InitialHandle(update *tgbotapi.Update) error {
+	if handler.Handler == nil {
+		return nil
+	}
 	return handler.Handler.InitialHandle(update)
 }
 
 func (handler *CommonHandleWrapper) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	switch update.Message.Command() {
-	case "/start":
+	case "start":
 		handler.HandleStart(update)
 		return handler, nil
-	case "/help":
+	case "help":
 		handler.HandleHelp(update)
 		return handler, nil
-	case "/abort":
+	case "abort":
 		handler.HandleAbort(update)
 		return nil, nil
 	}
@@ -65,7 +72,9 @@ func (handler *CommonHandleWrapper) GetCommands() []tgtypes.BotCommand {
 		{Command: "help", Description: "Показать список команд"},
 		{Command: "abort", Description: "Вернуться в главное меню"},
 	}
-	thisCommands = append(thisCommands, handler.Handler.GetCommands()...)
+	if handler.Handler != nil {
+		thisCommands = append(thisCommands, handler.Handler.GetCommands()...)
+	}
 	return thisCommands
 }
 
@@ -107,7 +116,12 @@ func (handler *CommonHandleWrapper) HandleAbort(update *tgbotapi.Update) {
 
 func (handler *CommonHandleWrapper) HandleUnknownCommand(update *tgbotapi.Update, err error) {
 	textB := strings.Builder{}
-	textB.WriteString("Неизвестная команда /" + update.Message.Command() + "\n")
+	command := update.Message.Command()
+	if command == "" {
+		textB.WriteString("Требуется команда\n")
+	} else {
+		textB.WriteString("Неизвестная команда /" + command + "\n")
+	}
 	textB.WriteString(handler.getAvailableCommandsText())
 	handler.GetBot().SendLog(tgbotapi.NewMessage(update.Message.Chat.ID, textB.String()))
 }

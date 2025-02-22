@@ -2,6 +2,7 @@ package tgbot
 
 import (
 	"errors"
+	"fmt"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
@@ -23,7 +24,7 @@ func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update) error 
 func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	command := update.Message.Command()
 	switch command {
-	case "/add_minecraft_login":
+	case "add_minecraft_login":
 		return &AddMinecraftLoginHandler{bot: handler.bot}, nil
 	default:
 		return nil, ErrUnknownCommand{Update: update, Command: command}
@@ -57,6 +58,12 @@ func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update) 
 	return nil
 }
 
+func (handler *AddMinecraftLoginHandler) handleLoginExists(update *tgbotapi.Update, login authdb.MinecraftLogin) {
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Ник %s уже занят, введите другой", login))
+	handler.bot.SendLog(msg)
+
+}
+
 func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	login, err := authdb.MakeMinecraftLogin(update.Message.Text)
 	if err != nil {
@@ -64,11 +71,23 @@ func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, a
 		handler.bot.SendLog(msg)
 		return handler, nil
 	}
+	maybeAccount, err := handler.bot.permsEngine.OptionalGetMinecraftAccount(login)
+	if err != nil {
+		return nil, err
+	}
+	if maybeAccount != nil {
+		if maybeAccount.ActorID == actor.ID {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Вы уже зарегистрировали этот ник")
+			handler.bot.SendLog(msg)
+			return nil, nil
+		}
+		handler.handleLoginExists(update, login)
+		return handler, nil
+	}
 	err = handler.bot.permsEngine.AddMinecraftLogin(actor.ID, login)
 	if err != nil {
 		if errors.Is(err, authdb.ErrorLoginTaken{}) {
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Ник уже занят, введите другой")
-			handler.bot.SendLog(msg)
+			handler.handleLoginExists(update, login)
 			return handler, nil
 		}
 		return nil, err
