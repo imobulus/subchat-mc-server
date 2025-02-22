@@ -10,8 +10,10 @@ import (
 )
 
 type ServerPermsEngineConfig struct {
-	CacheInvalidationDuration   time.Duration
-	DefaultMinecraftLoginsLimit int
+	CacheInvalidationDuration   time.Duration     `yaml:"cache_invalidation_duration"`
+	DefaultMinecraftLoginsLimit int               `yaml:"default_minecraft_logins_limit"`
+	AdminTags                   []string          `yaml:"admin_tags"`
+	AcceptedCahats              []authdb.TgChatId `yaml:"accepted_chats"`
 }
 
 var DefaultServerPermsEngineConfig = ServerPermsEngineConfig{
@@ -20,22 +22,39 @@ var DefaultServerPermsEngineConfig = ServerPermsEngineConfig{
 }
 
 type ServerPermsEngine struct {
-	config     ServerPermsEngineConfig
-	dbExecutor *authdb.AuthDbExecutor
+	config        ServerPermsEngineConfig
+	dbExecutor    *authdb.AuthDbExecutor
+	acceptedChats map[authdb.TgChatId]struct{}
+	adminTags     map[string]struct{}
 }
 
-type ErrorPermissionDenied struct {
+type ErrorAdminPermissionDenied struct {
 	Msg string
 }
 
-func (e *ErrorPermissionDenied) Error() string {
-	return "permission denied, " + e.Msg
+func (e ErrorAdminPermissionDenied) Error() string {
+	return "admin permission denied, " + e.Msg
+}
+
+func (e ErrorAdminPermissionDenied) Is(target error) bool {
+	_, ok := target.(ErrorAdminPermissionDenied)
+	return ok
 }
 
 func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.AuthDbExecutor) *ServerPermsEngine {
+	acceptedChats := map[authdb.TgChatId]struct{}{}
+	for _, chat := range config.AcceptedCahats {
+		acceptedChats[chat] = struct{}{}
+	}
+	adminTags := map[string]struct{}{}
+	for _, tag := range config.AdminTags {
+		adminTags[tag] = struct{}{}
+	}
 	return &ServerPermsEngine{
-		config:     config,
-		dbExecutor: dbExecutor,
+		config:        config,
+		dbExecutor:    dbExecutor,
+		acceptedChats: acceptedChats,
+		adminTags:     adminTags,
 	}
 }
 func (engine *ServerPermsEngine) IsAdmin(actorId authdb.ActorId) (bool, error) {
@@ -54,7 +73,7 @@ func (engine *ServerPermsEngine) CheckVerifyActorPermission(requestor authdb.Act
 		return errors.Wrap(err, "failed to check permission")
 	}
 	if !isAdmin {
-		return &ErrorPermissionDenied{"you need to be admin"}
+		return ErrorAdminPermissionDenied{"can't verify actor"}
 	}
 	return nil
 }
@@ -99,6 +118,19 @@ func (e ErrorExceededMaxMinecraftLogins) Is(target error) bool {
 	return ok
 }
 
+type ErrorNotAccepted struct {
+	ActorId authdb.ActorId
+}
+
+func (e ErrorNotAccepted) Error() string {
+	return fmt.Sprintf("actor %d is not accepted", e.ActorId)
+}
+
+func (e ErrorNotAccepted) Is(target error) bool {
+	_, ok := target.(ErrorNotAccepted)
+	return ok
+}
+
 func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	actorId authdb.ActorId,
 ) error {
@@ -106,6 +138,9 @@ func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	err := engine.dbExecutor.GetActor(&actor)
 	if err != nil {
 		return err
+	}
+	if !actor.Accepted {
+		return ErrorNotAccepted{actorId}
 	}
 	limit := engine.config.DefaultMinecraftLoginsLimit
 	if actor.CustomMinecraftLoginLimit != nil {
@@ -149,4 +184,133 @@ func (engine *ServerPermsEngine) GetActorByTgUser(tgUserId authdb.TgUserId, acto
 func (engine *ServerPermsEngine) UpdateTgUserInfo(tguser tgbotapi.User) error {
 	err := engine.dbExecutor.UpdateTgUserInfo(tguser)
 	return err
+}
+
+type ErrorNotYourLogin struct {
+	ActorId authdb.ActorId
+	Login   authdb.MinecraftLogin
+}
+
+func (e ErrorNotYourLogin) Error() string {
+	return fmt.Sprintf("actor %d doesn't have login %s", e.ActorId, e.Login)
+}
+
+func (e ErrorNotYourLogin) Is(target error) bool {
+	_, ok := target.(ErrorNotYourLogin)
+	return ok
+}
+
+func (engine *ServerPermsEngine) CheckRemoveMinecraftLoginPermission(
+	actorId authdb.ActorId,
+	login authdb.MinecraftLogin,
+) error {
+	actor := authdb.Actor{ID: actorId}
+	err := engine.dbExecutor.GetActor(&actor)
+	if err != nil {
+		return err
+	}
+	loginFound := false
+	for _, acc := range actor.MinecraftAccounts {
+		if acc.ID == login {
+			loginFound = true
+			break
+		}
+	}
+	if !loginFound {
+		return ErrorNotYourLogin{actorId, login}
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) RemoveMinecraftLogin(
+	actorId authdb.ActorId,
+	login authdb.MinecraftLogin,
+) error {
+	err := engine.CheckRemoveMinecraftLoginPermission(actorId, login)
+	if err != nil {
+		return errors.Wrap(err, "failed to check permission")
+	}
+	err = engine.dbExecutor.RemoveMinecraftLogin(login)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove minecraft login")
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) computeActorAcceptedStatus(actor *authdb.Actor) bool {
+	if actor.IsAdmin {
+		return true
+	}
+	for _, maybeAdmin := range actor.VerifiedByAdmins {
+		if maybeAdmin.IsAdmin {
+			return true
+		}
+	}
+	for _, chat := range actor.SeenInChats {
+		if _, ok := engine.acceptedChats[chat.ID]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (engine *ServerPermsEngine) updateAcceptedStatus(actor *authdb.Actor, doRemove bool) error {
+	accepted := engine.computeActorAcceptedStatus(actor)
+	if accepted == actor.Accepted {
+		return nil
+	}
+	if !doRemove && !accepted {
+		return nil
+	}
+	err := engine.dbExecutor.SetAccept(actor.ID, accepted)
+	if err != nil {
+		return errors.Wrap(err, "failed to update accept status")
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) computeAdminStatus(actor *authdb.Actor) bool {
+	for _, tgAccount := range actor.TgAccounts {
+		if _, ok := engine.adminTags[tgAccount.LastSeenInfo.UserName]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (engine *ServerPermsEngine) updateAdminStatus(actor *authdb.Actor) error {
+	isAdmin := engine.computeAdminStatus(actor)
+	if isAdmin == actor.IsAdmin {
+		return nil
+	}
+	err := engine.dbExecutor.SetAdmin(actor.ID, isAdmin)
+	if err != nil {
+		return errors.Wrap(err, "failed to update admin status")
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) UpdateActorStatus(actorId authdb.ActorId, doRemove bool) error {
+	actor := authdb.Actor{ID: actorId}
+	err := engine.dbExecutor.GetActor(&actor)
+	if err != nil {
+		return err
+	}
+	err = engine.updateAcceptedStatus(&actor, doRemove)
+	if err != nil {
+		return errors.Wrap(err, "failed to update accept status")
+	}
+	err = engine.updateAdminStatus(&actor)
+	if err != nil {
+		return errors.Wrap(err, "failed to update accept status")
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) GetActorIdsUpdatedSince(moment time.Time) ([]authdb.ActorId, error) {
+	ids, err := engine.dbExecutor.GetActorIdsUpdatedSince(moment)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get actor ids")
+	}
+	return ids, nil
 }

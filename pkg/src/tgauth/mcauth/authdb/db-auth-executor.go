@@ -54,7 +54,7 @@ func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
 		return errors.Errorf("found more than one tg user %s", ShortDescribeTgUser(tguser))
 	}
 	if len(users) == 0 {
-		err := authdb.createTgUser(tguser)
+		err := authdb.createTgUserWithActor(tguser)
 		if err != nil {
 			if errors.Is(err, gorm.ErrDuplicatedKey) {
 				// only possible when a new user sends initial messages too fast
@@ -77,7 +77,7 @@ func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
 	return nil
 }
 
-func (authdb *AuthDbExecutor) createTgUser(tguser tgbotapi.User) error {
+func (authdb *AuthDbExecutor) createTgUserWithActor(tguser tgbotapi.User) error {
 	authdb.logger.Debug("creating tg user", zap.Any("user", tguser))
 	actor := Actor{
 		Nickname:    "",
@@ -267,4 +267,34 @@ func (authdb *AuthDbExecutor) GetActorByTgUser(tguser TgUserId, actor *Actor) er
 		return errors.Wrap(err, "failed to get actor")
 	}
 	return nil
+}
+
+func (authdb *AuthDbExecutor) SetAccept(actorId ActorId, accepted bool) error {
+	authdb.logger.Debug("setting actor accept", zap.Uint("actor_id", uint(actorId)), zap.Bool("accepted", accepted))
+	actor := Actor{ID: actorId}
+	err := authdb.db.Model(&actor).Update("accepted", accepted).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to set actor accept %d", actorId)
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) SetAdmin(actorId ActorId, isAdmin bool) error {
+	authdb.logger.Debug("setting actor admin", zap.Uint("actor_id", uint(actorId)), zap.Bool("admin", isAdmin))
+	actor := Actor{ID: actorId}
+	err := authdb.db.Model(&actor).Update("is_admin", isAdmin).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to set actor admin %d", actorId)
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) GetActorIdsUpdatedSince(time time.Time) ([]ActorId, error) {
+	authdb.logger.Debug("getting actor ids updated since", zap.Time("time", time))
+	var actorIds []ActorId
+	err := authdb.db.Model(&TgUser{}).Where("updated_at > ?", time).Distinct("actor_id").Pluck("actor_id", &actorIds).Error
+	if err != nil {
+		return nil, errors.Wrap(err, "fail to get actor ids")
+	}
+	return actorIds, nil
 }
