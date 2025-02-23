@@ -18,7 +18,7 @@ type AuthDbExecutorConfig struct {
 }
 
 var DefaultAuthDbExecutorConfig = AuthDbExecutorConfig{
-	ServerOverseerUrl: "mc-server:8080",
+	ServerOverseerUrl: "http://mc-server:8080",
 }
 
 type AuthDbExecutor struct {
@@ -313,13 +313,34 @@ func (authdb *AuthDbExecutor) SetAdmin(actorId ActorId, isAdmin bool) error {
 // }
 
 func (authdb *AuthDbExecutor) GetAcceptedActorsWithAccounts() ([]Actor, error) {
-	authdb.logger.Debug("getting accepted actors with accounts")
+	// authdb.logger.Debug("getting accepted actors with accounts")
 	var actors []Actor
 	err := authdb.db.Where(&Actor{Accepted: true}).Preload("MinecraftAccounts").Find(&actors).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "fail to get accepted actors")
 	}
 	return actors, nil
+}
+
+func (authdb *AuthDbExecutor) SetWhitelist(logins []MinecraftLogin) error {
+	// authdb.logger.Debug("setting logins", zap.Any("logins", logins))
+	body, err := json.Marshal(logins)
+	if err != nil {
+		return errors.Wrap(err, "fail to marshal logins")
+	}
+	client := http.Client{}
+	req, err := http.NewRequest("POST", authdb.config.ServerOverseerUrl+"/set-whitelist", bytes.NewReader(body))
+	if err != nil {
+		return errors.Wrap(err, "fail to create request")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "fail to send request")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("bad response status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (authdb *AuthDbExecutor) SetPassword(login MinecraftLogin, password string) error {

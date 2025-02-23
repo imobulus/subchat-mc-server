@@ -94,8 +94,6 @@ func (manager *AccountManager) updateAccountState() {
 	}
 	manager.setPasswords()
 	manager.checkAccounts()
-	fmt.Println("needed accounts", manager.neededAccounts)
-	fmt.Println("account passwords to set", manager.accountPasswordsToSet)
 }
 
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -115,7 +113,12 @@ func (manager *AccountManager) setPasswords() {
 			// ignore setpassword for not needed account
 			continue
 		}
-		err := manager.execFunc(fmt.Sprintf("/auth register %s %s", accountUuid, password))
+		err := manager.execFunc(fmt.Sprintf("/auth remove %s", accountUuid))
+		if err != nil {
+			manager.logger.Error("cannot remove user", zap.Error(err))
+			continue
+		}
+		err = manager.execFunc(fmt.Sprintf("/auth register %s %s", accountUuid, password))
 		if err != nil {
 			manager.logger.Error("cannot set password", zap.Error(err))
 			continue

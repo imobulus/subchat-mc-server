@@ -30,6 +30,8 @@ func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *
 		return &AddMinecraftLoginHandler{bot: handler.bot}, nil
 	case "remove_minecraft_login":
 		return &RemoveMinecraftLoginHandler{bot: handler.bot}, nil
+	case "newpassword":
+		return &NewPasswordHandler{bot: handler.bot}, nil
 	default:
 		return nil, ErrUnknownCommand{Update: update, Command: command}
 	}
@@ -39,6 +41,7 @@ func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 	return []tgtypes.BotCommand{
 		{Command: "add_minecraft_login", Description: "Зарегистрировать аккаунт на сервере"},
 		{Command: "remove_minecraft_login", Description: "Удалить аккаунт с сервера"},
+		{Command: "newpassword", Description: "Сгенерировать новый пароль для аккаунта"},
 	}
 }
 func (handler *PrivateChatHandler) GetHelpDescription() string {
@@ -150,7 +153,7 @@ func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, a
 		return nil, err
 	}
 	msg = tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
-		"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /new-pssword",
+		"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /newpassword",
 		login, newPassword,
 	))
 	handler.bot.SendLog(msg)
@@ -213,8 +216,62 @@ func (handler *RemoveMinecraftLoginHandler) GetCommands() []tgtypes.BotCommand {
 	return nil
 }
 func (handler *RemoveMinecraftLoginHandler) GetHelpDescription() string {
-	return "Сейчас вы удаляете ник с сервера"
+	return "Сейчас вы удаляете аккакнт с сервера"
 }
 func (handler *RemoveMinecraftLoginHandler) GetBot() *TgBot {
+	return handler.bot
+}
+
+type NewPasswordHandler struct {
+	bot *TgBot
+}
+
+func (handler *NewPasswordHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	respBuilder := strings.Builder{}
+	respBuilder.WriteString("Введите аккаунт для которого хотите сгенерировать новый пароль.\n" + "Ваши аккаунты:\n")
+	for _, acc := range actor.MinecraftAccounts {
+		respBuilder.WriteString(string(acc.ID))
+		respBuilder.WriteRune('\n')
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, respBuilder.String())
+	handler.bot.SendLog(msg)
+	return handler, nil
+}
+
+func (handler *NewPasswordHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	if update.Message.Command() != "" {
+		return handler, ErrUnknownCommand{Update: update, Command: update.Message.Command()}
+	}
+	login, err := authdb.MakeMinecraftLogin(update.Message.Text)
+	if err != nil {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт содержит недопустимые символы или слишком короткий или длинный, введите другой")
+		handler.bot.SendLog(msg)
+		return handler, nil
+	}
+	newPassword := handler.bot.permsEngine.GeneratePassword()
+	err = handler.bot.permsEngine.SetPassword(actor.ID, login, newPassword)
+	if err != nil {
+		if errors.Is(err, permsengine.ErrorNotYourLogin{}) {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Этот аккаунт не принадлежит вам")
+			handler.bot.SendLog(msg)
+			return nil, nil
+		}
+		return nil, err
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+		"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /newpassword",
+		login, newPassword,
+	))
+	handler.bot.SendLog(msg)
+	return nil, nil
+}
+
+func (handler *NewPasswordHandler) GetCommands() []tgtypes.BotCommand {
+	return nil
+}
+func (handler *NewPasswordHandler) GetHelpDescription() string {
+	return "Сейчас вы генерируете новый пароль для аккаунта"
+}
+func (handler *NewPasswordHandler) GetBot() *TgBot {
 	return handler.bot
 }

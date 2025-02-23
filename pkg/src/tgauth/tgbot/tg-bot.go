@@ -49,11 +49,13 @@ func (handler *ChatHandler) GetScope() *tgtypes.BotCommandScope {
 }
 
 type TgBotConfig struct {
-	Debug bool `yaml:"debug"`
+	Debug                 bool          `yaml:"debug"`
+	SetWhitelistFrequency time.Duration `yaml:"set whitelist frequency"`
 }
 
 var DefaultTgBotConfig = TgBotConfig{
-	Debug: false,
+	Debug:                 false,
+	SetWhitelistFrequency: time.Second,
 }
 
 type TgBotSecret struct {
@@ -108,6 +110,7 @@ func (bot *TgBot) Run() error {
 	if err != nil {
 		return err
 	}
+	bot.runWhitelistSetter()
 	return bot.runUpdatesLoop()
 }
 
@@ -126,6 +129,28 @@ func (bot *TgBot) initCommands() error {
 		return err
 	}
 	return nil
+}
+
+func (bot *TgBot) runWhitelistSetter() {
+	go func() {
+		ticker := time.NewTicker(DefaultTgBotConfig.SetWhitelistFrequency)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-bot.ctx.Done():
+				return
+			case <-ticker.C:
+				bot.setWhitelist()
+			}
+		}
+	}()
+}
+
+func (bot *TgBot) setWhitelist() {
+	err := bot.permsEngine.UpdateWhitelist()
+	if err != nil {
+		bot.logger.Error("Failed to update whitelist", zap.Error(err))
+	}
 }
 
 func (bot *TgBot) runUpdatesLoop() error {

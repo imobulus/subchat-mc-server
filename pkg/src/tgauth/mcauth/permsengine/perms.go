@@ -339,8 +339,26 @@ type UuidsUpdate struct {
 	ToDelete []string `json:"to_delete"`
 }
 
-func (engine *ServerPermsEngine) GetAcceptedActorsWithAccounts() ([]authdb.Actor, error) {
-	return engine.dbExecutor.GetAcceptedActorsWithAccounts()
+// func (engine *ServerPermsEngine) GetAcceptedActorsWithAccounts() ([]authdb.Actor, error) {
+// 	return engine.dbExecutor.GetAcceptedActorsWithAccounts()
+// }
+
+func (engine *ServerPermsEngine) UpdateWhitelist() error {
+	actors, err := engine.dbExecutor.GetAcceptedActorsWithAccounts()
+	if err != nil {
+		return errors.Wrap(err, "failed to get accepted actors with accounts")
+	}
+	logins := make([]authdb.MinecraftLogin, 0, len(actors))
+	for _, actor := range actors {
+		for _, acc := range actor.MinecraftAccounts {
+			logins = append(logins, acc.ID)
+		}
+	}
+	err = engine.dbExecutor.SetWhitelist(logins)
+	if err != nil {
+		return errors.Wrap(err, "failed to set whitelist")
+	}
+	return nil
 }
 
 var passwordRegex = regexp.MustCompile(`^[a-zA-Z0-9]{8,}$`)
