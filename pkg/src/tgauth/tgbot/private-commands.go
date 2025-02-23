@@ -12,14 +12,20 @@ import (
 )
 
 type PrivateChatHandler struct {
-	bot *TgBot
+	lastActor *authdb.Actor
+	bot       *TgBot
 }
 
 func NewPrivateChatHandler(bot *TgBot) *PrivateChatHandler {
 	return &PrivateChatHandler{bot: bot}
 }
 
+func (handler *PrivateChatHandler) IsLAstAdmin() bool {
+	return handler.lastActor != nil && handler.lastActor.IsAdmin
+}
+
 func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	handler.lastActor = actor
 	return handler, nil
 }
 
@@ -33,17 +39,36 @@ func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *
 	case "newpassword":
 		return &NewPasswordHandler{bot: handler.bot}, nil
 	default:
+		if handler.IsLAstAdmin() {
+			switch command {
+			case "approve_user":
+				return &ApproveUserHandler{bot: handler.bot}, nil
+			case "disapprove_user":
+				return &DisapproveUserHandler{bot: handler.bot}, nil
+			case "list_users":
+				return &ListUsersHandler{bot: handler.bot}, nil
+			}
+		}
 		return nil, ErrUnknownCommand{Update: update, Command: command}
 	}
 }
 
 func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
-	return []tgtypes.BotCommand{
+	commands := []tgtypes.BotCommand{
 		{Command: "add_minecraft_login", Description: "Зарегистрировать аккаунт на сервере"},
 		{Command: "remove_minecraft_login", Description: "Удалить аккаунт с сервера"},
 		{Command: "newpassword", Description: "Сгенерировать новый пароль для аккаунта"},
 	}
+	if handler.IsLAstAdmin() {
+		commands = append(commands, []tgtypes.BotCommand{
+			{Command: "approve_user", Description: "Одобрить пользователя"},
+			{Command: "disapprove_user", Description: "Отклонить пользователя"},
+			{Command: "list_users", Description: "Список пользователей"},
+		}...)
+	}
+	return commands
 }
+
 func (handler *PrivateChatHandler) GetHelpDescription() string {
 	return "Главное Меню"
 }
@@ -273,5 +298,79 @@ func (handler *NewPasswordHandler) GetHelpDescription() string {
 	return "Сейчас вы генерируете новый пароль для аккаунта"
 }
 func (handler *NewPasswordHandler) GetBot() *TgBot {
+	return handler.bot
+}
+
+type ApproveUserHandler struct {
+	bot *TgBot
+}
+
+func (handler *ApproveUserHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	// not implemented
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Not implemented")
+	handler.bot.SendLog(msg)
+	return nil, nil
+}
+
+func (handler *ApproveUserHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	return nil, nil
+}
+func (handler *ApproveUserHandler) GetCommands() []tgtypes.BotCommand {
+	return nil
+}
+func (handler *ApproveUserHandler) GetHelpDescription() string {
+	return "Одобрить пользователя"
+}
+func (handler *ApproveUserHandler) GetBot() *TgBot {
+	return handler.bot
+}
+
+type DisapproveUserHandler struct {
+	bot *TgBot
+}
+
+func (handler *DisapproveUserHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	// not implemented
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Not implemented")
+	handler.bot.SendLog(msg)
+	return nil, nil
+}
+
+func (handler *DisapproveUserHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	return nil, nil
+}
+
+func (handler *DisapproveUserHandler) GetCommands() []tgtypes.BotCommand {
+	return nil
+}
+func (handler *DisapproveUserHandler) GetHelpDescription() string {
+	return "Отклонить пользователя"
+}
+func (handler *DisapproveUserHandler) GetBot() *TgBot {
+	return handler.bot
+}
+
+type ListUsersHandler struct {
+	bot *TgBot
+}
+
+func (handler *ListUsersHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	// not implemented
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Not implemented")
+	handler.bot.SendLog(msg)
+	return nil, nil
+}
+
+func (handler *ListUsersHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	return nil, nil
+}
+
+func (handler *ListUsersHandler) GetCommands() []tgtypes.BotCommand {
+	return nil
+}
+func (handler *ListUsersHandler) GetHelpDescription() string {
+	return "Список пользователей"
+}
+func (handler *ListUsersHandler) GetBot() *TgBot {
 	return handler.bot
 }
