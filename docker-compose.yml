@@ -1,20 +1,14 @@
 name: subchat-mc-server
 
-volumes:
-  mcworld:
-  mclists:
-  easyauth-storage:
-  bot-db:
-
 configs:
   mcconfig:
-    file: ./minecraft-server/server-config.yaml
+    file: ${CONFIGS_PATH:-server-configs}/server-config.yaml
   mcstartup:
-    file: ./minecraft-server/startup-commands.txt
+    file: ${CONFIGS_PATH:-server-configs}/startup-commands.txt
   
 secrets:
   tgbot-secret:
-    file: ./secrets/tgbot.json
+    file: ${CONFIGS_PATH:-secrets}/tgbot.json
 
 services:
   mc-server:
@@ -22,7 +16,7 @@ services:
       context: .
       dockerfile: mc-server.Dockerfile
     ports:
-      - 100.126.72.77:8080:8080
+      - ${OVERSEER_IP}${OVERSEER_IP:+:}8080:8080
     stdin_open: true
     tty: true
     # command: bash    
@@ -32,32 +26,28 @@ services:
       - source: mcstartup
         target: /mcserver/startup-commands.txt
     volumes:
-      - type: volume
-        source: mcworld
+      - type: bind
+        source: ${STORAGE_PATH:-storage}/world
         target: /mcserver/world
-        volume:
-          nocopy: true
-      - type: volume
-        source: mclists
+      - type: bind
+        source: ${STORAGE_PATH:-storage}/playes-lists
         target: /mcserver/player-lists
-        volume:
-          nocopy: true
-      - type: volume
-        source: easyauth-storage
+      - type: bind
+        source: ${STORAGE_PATH:-storage}/easyauth-leveldb
         target: /mcserver/mods/EasyAuth/levelDBStore
-        volume:
-          nocopy: true
+    user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
   mc-proxy:
     build:
       context: .
       dockerfile: mc-proxy.Dockerfile
     ports:
-      - 100.126.72.77:25565:25565
+      - ${SERVER_IP}${SERVER_IP:+:}25565:25565
     volumes:
       - type: bind
-        source: mc-proxies
+        source: ${CONFIGS_PATH:-server-configs}/mc-proxies
         target: /infrared/proxies
         read_only: true
+    user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
   tg-bot:
     build:
       context: .
@@ -65,8 +55,7 @@ services:
     secrets:
       - tgbot-secret
     volumes:
-      - type: volume
-        source: bot-db
+      - type: bind
+        source: ${STORAGE_PATH:-storage}/bot-db
         target: /sqlite
-        volume:
-          nocopy: true
+    user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
