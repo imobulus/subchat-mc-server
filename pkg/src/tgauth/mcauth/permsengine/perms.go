@@ -146,6 +146,14 @@ func (e ErrorNotAccepted) Is(target error) bool {
 	return ok
 }
 
+func (engine *ServerPermsEngine) GetMinecraftLoginLimitByActor(actor *authdb.Actor) int {
+	limit := engine.config.DefaultMinecraftLoginsLimit
+	if actor.CustomMinecraftLoginLimit != nil {
+		limit = *actor.CustomMinecraftLoginLimit
+	}
+	return limit
+}
+
 func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	actorId authdb.ActorId,
 ) error {
@@ -157,11 +165,7 @@ func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	if !actor.Accepted {
 		return ErrorNotAccepted{actorId}
 	}
-	limit := engine.config.DefaultMinecraftLoginsLimit
-	if actor.CustomMinecraftLoginLimit != nil {
-		limit = *actor.CustomMinecraftLoginLimit
-	}
-	fmt.Println("limit is ", limit)
+	limit := engine.GetMinecraftLoginLimitByActor(&actor)
 	if limit >= 0 && len(actor.MinecraftAccounts) >= limit {
 		return ErrorExceededMaxMinecraftLogins{
 			CurrentNumber: len(actor.MinecraftAccounts),

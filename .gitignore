@@ -1,2 +1,4 @@
 secrets/
-storage/
+storage/*/*
+!storage/*/.INIT.txt
+.env

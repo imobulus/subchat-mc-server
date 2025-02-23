@@ -221,7 +221,7 @@ func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login Minecraft
 		ID:      login,
 		ActorID: actorId,
 	}
-	err := authdb.db.Create(&minecraftAccount).Error
+	err := authdb.db.Save(&minecraftAccount).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return ErrorLoginTaken{login}

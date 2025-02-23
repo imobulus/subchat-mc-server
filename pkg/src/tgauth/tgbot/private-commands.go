@@ -32,6 +32,8 @@ func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update, actor 
 func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	command := update.Message.Command()
 	switch command {
+	case "my_minecraft_logins":
+		return &MyMinecraftLoginsHandler{bot: handler.bot}, nil
 	case "add_minecraft_login":
 		return &AddMinecraftLoginHandler{bot: handler.bot}, nil
 	case "remove_minecraft_login":
@@ -55,6 +57,7 @@ func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *
 
 func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 	commands := []tgtypes.BotCommand{
+		{Command: "my_minecraft_logins", Description: "Список ваших аккаунтов"},
 		{Command: "add_minecraft_login", Description: "Зарегистрировать аккаунт на сервере"},
 		{Command: "remove_minecraft_login", Description: "Удалить аккаунт с сервера"},
 		{Command: "newpassword", Description: "Сгенерировать новый пароль для аккаунта"},
@@ -73,6 +76,49 @@ func (handler *PrivateChatHandler) GetHelpDescription() string {
 	return "Главное Меню"
 }
 func (handler *PrivateChatHandler) GetBot() *TgBot {
+	return handler.bot
+}
+
+type MyMinecraftLoginsHandler struct {
+	bot *TgBot
+}
+
+func (handler *MyMinecraftLoginsHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	msgBuilder := strings.Builder{}
+	if len(actor.MinecraftAccounts) == 0 {
+		msgBuilder.WriteString("У вас нет зарегистрированных аккаунтов")
+	} else {
+		msgBuilder.WriteString("Ваши аккаунты:\n")
+		for _, acc := range actor.MinecraftAccounts {
+			msgBuilder.WriteString(string(acc.ID))
+			msgBuilder.WriteRune('\n')
+		}
+	}
+	limit := handler.bot.permsEngine.GetMinecraftLoginLimitByActor(actor)
+	msgBuilder.WriteString(fmt.Sprintf("\nЛимит аккаунтов: %d/%d", len(actor.MinecraftAccounts), limit))
+	if !actor.Accepted {
+		msgBuilder.WriteString(
+			"\n\nМне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. Используйте /imhere@subchat_sentry_bot в сабчате",
+		)
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgBuilder.String())
+	handler.bot.SendLog(msg)
+	return nil, nil
+}
+
+func (handler *MyMinecraftLoginsHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	return nil, nil
+}
+
+func (handler *MyMinecraftLoginsHandler) GetCommands() []tgtypes.BotCommand {
+	return nil
+}
+
+func (handler *MyMinecraftLoginsHandler) GetHelpDescription() string {
+	return "Список ваших аккаунтов"
+}
+
+func (handler *MyMinecraftLoginsHandler) GetBot() *TgBot {
 	return handler.bot
 }
 
@@ -205,6 +251,14 @@ func (handler *RemoveMinecraftLoginHandler) InitialHandle(update *tgbotapi.Updat
 		handler.bot.SendLog(msg)
 		return nil, nil
 	}
+	msgBuilder := strings.Builder{}
+	msgBuilder.WriteString("Введите аккаунт который хотите удалить\n")
+	for _, acc := range actor.MinecraftAccounts {
+		msgBuilder.WriteString(string(acc.ID))
+		msgBuilder.WriteRune('\n')
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgBuilder.String())
+	handler.bot.SendLog(msg)
 	return handler, nil
 }
 

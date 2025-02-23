@@ -8,7 +8,7 @@ configs:
   
 secrets:
   tgbot-secret:
-    file: ${CONFIGS_PATH:-secrets}/tgbot.json
+    file: ${SECRETS_PATH:-secrets}/tgbot.json
 
 services:
   mc-server:
