@@ -2,6 +2,7 @@ package mcserver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/imobulus/subchat-mc-server/src/mcprocess"
 	"github.com/pkg/errors"
+	"github.com/syndtr/goleveldb/leveldb"
 	"go.uber.org/zap"
 )
 
@@ -21,12 +23,16 @@ type Config struct {
 	PropertiesPath    string                    `yaml:"properties path"`
 	ServerProperties  PropertiesOverrides       `yaml:"server properties"`
 	CommandsPort      int                       `yaml:"commands port"`
+	AuthDbPath        string                    `yaml:"auth db path"`
+	UserCachePath     string                    `yaml:"user cache path"`
 	JavaProcessConfig mcprocess.McProcessConfig `yaml:"java process config"`
 }
 
 var DefaultConfig = Config{
 	PropertiesPath:    "server.properties",
 	CommandsPort:      8080,
+	AuthDbPath:        "mods/EasyAuth/levelDBStore",
+	UserCachePath:     "usercache.json",
 	JavaProcessConfig: mcprocess.DefaultMcProcessConfig,
 }
 
@@ -153,21 +159,60 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) handleUserCache(w http.ResponseWriter, r *http.Request) {
+	userCacheBytes, err := os.ReadFile(s.config.UserCachePath)
+	if err != nil {
+		s.logger.Error("cannot read user cache", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(userCacheBytes)
+}
+
+func (s *Server) handleRegisteredUsers(w http.ResponseWriter, r *http.Request) {
+	db, err := leveldb.OpenFile(s.config.AuthDbPath, nil)
+	if err != nil {
+		s.logger.Error("cannot open db", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+	iter := db.NewIterator(nil, nil)
+	defer iter.Release()
+	w.Header().Set("Content-Type", "application/json")
+	ids := make([]string, 0, 10)
+	for iter.Next() {
+		idKey := string(iter.Key())
+		ids = append(ids, strings.TrimPrefix(idKey, "UUID:"))
+	}
+	content, err := json.Marshal(ids)
+	if err != nil {
+		s.logger.Error("cannot marshal ids", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(content)
+}
+
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
-	if r.RequestURI == "/command" {
+	switch r.RequestURI {
+	case "/command":
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		s.handleCommand(w, r)
-		return
-	}
-	if r.RequestURI == "/shutdown" {
+	case "/usercache":
+		s.handleUserCache(w, r)
+	case "/registered_users":
+		s.handleRegisteredUsers(w, r)
+	case "/shutdown":
 		s.cancel()
 		w.WriteHeader(http.StatusOK)
-		return
+	default:
+		w.WriteHeader(http.StatusNotFound)
 	}
-	w.WriteHeader(http.StatusNotFound)
 }
 
 func (s *Server) runServer() {

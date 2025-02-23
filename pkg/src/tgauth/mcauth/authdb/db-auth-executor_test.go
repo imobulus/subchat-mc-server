@@ -17,7 +17,7 @@ func TestDbInteractions(t *testing.T) {
 		t.Fatalf("Failed to open db: %v", err)
 	}
 	logger := zap.Must(zap.NewDevelopment())
-	executor, err := NewAuthDbExecutor(db, logger)
+	executor, err := NewAuthDbExecutor(db, DefaultAuthDbExecutorConfig, logger)
 	if err != nil {
 		t.Fatalf("Failed to init db: %v", err)
 	}

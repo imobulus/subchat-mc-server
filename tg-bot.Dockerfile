@@ -1,5 +1,4 @@
 FROM golang:1.23.4 AS build
-VOLUME /sqlite/auth.db
 WORKDIR /build
 COPY pkg/ pkg/
 WORKDIR /build/pkg/cmd/tgauth

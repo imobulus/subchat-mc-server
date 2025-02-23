@@ -1,2 +1,3 @@
+tg bot secret path: /run/secrets/tgbot-secret
 perms:
   admin_tags: [IMObulus]

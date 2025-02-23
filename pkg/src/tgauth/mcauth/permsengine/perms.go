@@ -41,7 +41,7 @@ func (e ErrorAdminPermissionDenied) Is(target error) bool {
 	return ok
 }
 
-func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.AuthDbExecutor) *ServerPermsEngine {
+func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.AuthDbExecutor) (*ServerPermsEngine, error) {
 	acceptedChats := map[authdb.TgChatId]struct{}{}
 	for _, chat := range config.AcceptedCahats {
 		acceptedChats[chat] = struct{}{}
@@ -55,7 +55,7 @@ func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.Aut
 		dbExecutor:    dbExecutor,
 		acceptedChats: acceptedChats,
 		adminTags:     adminTags,
-	}
+	}, nil
 }
 func (engine *ServerPermsEngine) IsAdmin(actorId authdb.ActorId) (bool, error) {
 	actor := authdb.Actor{ID: actorId}
@@ -307,10 +307,19 @@ func (engine *ServerPermsEngine) UpdateActorStatus(actorId authdb.ActorId, doRem
 	return nil
 }
 
-func (engine *ServerPermsEngine) GetActorIdsUpdatedSince(moment time.Time) ([]authdb.ActorId, error) {
-	ids, err := engine.dbExecutor.GetActorIdsUpdatedSince(moment)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get actor ids")
-	}
-	return ids, nil
+// func (engine *ServerPermsEngine) GetActorIdsUpdatedSince(moment time.Time) ([]authdb.ActorId, error) {
+// 	ids, err := engine.dbExecutor.GetActorIdsUpdatedSince(moment)
+// 	if err != nil {
+// 		return nil, errors.Wrap(err, "failed to get actor ids")
+// 	}
+// 	return ids, nil
+// }
+
+type UuidsUpdate struct {
+	ToAdd    []string `json:"to_add"`
+	ToDelete []string `json:"to_delete"`
+}
+
+func (engine *ServerPermsEngine) GetAcceptedActorsWithAccounts() ([]authdb.Actor, error) {
+	return engine.dbExecutor.GetAcceptedActorsWithAccounts()
 }

@@ -20,6 +20,7 @@ type Config struct {
 	Debug           bool                                `yaml:"debug"`
 	TgBot           tgbot.TgBotConfig                   `yaml:"tg bot"`
 	TgBotSecretPath string                              `yaml:"tg bot secret path"`
+	AuthDbConfig    authdb.AuthDbExecutorConfig         `yaml:"auth db"`
 	Perms           permsengine.ServerPermsEngineConfig `yaml:"perms"`
 	SqliteLocation  string                              `yaml:"sqlite location"`
 }
@@ -27,6 +28,7 @@ type Config struct {
 var DefaultConfig = Config{
 	TgBot:           tgbot.DefaultTgBotConfig,
 	TgBotSecretPath: "/run/secrets/tg-bot.json",
+	AuthDbConfig:    authdb.DefaultAuthDbExecutorConfig,
 	Perms:           permsengine.DefaultServerPermsEngineConfig,
 	SqliteLocation:  "/sqlite/auth.db",
 }
@@ -80,12 +82,15 @@ func main() {
 		logger.Fatal("Failed to open db", zap.Error(err))
 	}
 
-	dbExec, err := authdb.NewAuthDbExecutor(db, logger)
+	dbExec, err := authdb.NewAuthDbExecutor(db, config.AuthDbConfig, logger)
 	if err != nil {
 		logger.Fatal("Failed to init db", zap.Error(err))
 	}
 
-	permsEngine := permsengine.NewServerPermsEngine(config.Perms, dbExec)
+	permsEngine, err := permsengine.NewServerPermsEngine(config.Perms, dbExec)
+	if err != nil {
+		logger.Fatal("Failed to create perms engine", zap.Error(err))
+	}
 	tgBot, err := tgbot.NewTgBot(config.TgBot, tgSecret, permsEngine, logger, ctx)
 	if err != nil {
 		logger.Fatal("Failed to create tg bot", zap.Error(err))

@@ -10,13 +10,23 @@ import (
 	"gorm.io/gorm"
 )
 
+type AuthDbExecutorConfig struct {
+	ServerOverseerUrl string `yaml:"server_overseer_url"`
+}
+
+var DefaultAuthDbExecutorConfig = AuthDbExecutorConfig{
+	ServerOverseerUrl: "mc-server:8080",
+}
+
 type AuthDbExecutor struct {
+	config AuthDbExecutorConfig
 	db     *gorm.DB
 	logger *zap.Logger
 }
 
-func NewAuthDbExecutor(db *gorm.DB, logger *zap.Logger) (*AuthDbExecutor, error) {
+func NewAuthDbExecutor(db *gorm.DB, config AuthDbExecutorConfig, logger *zap.Logger) (*AuthDbExecutor, error) {
 	dbExec := &AuthDbExecutor{
+		config: config,
 		db:     db,
 		logger: logger,
 	}
@@ -289,12 +299,28 @@ func (authdb *AuthDbExecutor) SetAdmin(actorId ActorId, isAdmin bool) error {
 	return nil
 }
 
-func (authdb *AuthDbExecutor) GetActorIdsUpdatedSince(time time.Time) ([]ActorId, error) {
-	authdb.logger.Debug("getting actor ids updated since", zap.Time("time", time))
-	var actorIds []ActorId
-	err := authdb.db.Model(&TgUser{}).Where("updated_at > ?", time).Distinct("actor_id").Pluck("actor_id", &actorIds).Error
+// func (authdb *AuthDbExecutor) GetActorIdsUpdatedSince(time time.Time) ([]ActorId, error) {
+// 	authdb.logger.Debug("getting actor ids updated since", zap.Time("time", time))
+// 	var actorIds []ActorId
+// 	err := authdb.db.Model(&TgUser{}).Where("updated_at > ?", time).Distinct("actor_id").Pluck("actor_id", &actorIds).Error
+// 	if err != nil {
+// 		return nil, errors.Wrap(err, "fail to get actor ids")
+// 	}
+// 	return actorIds, nil
+// }
+
+func (authdb *AuthDbExecutor) GetAcceptedActorsWithAccounts() ([]Actor, error) {
+	authdb.logger.Debug("getting accepted actors with accounts")
+	var actors []Actor
+	err := authdb.db.Where(&Actor{Accepted: true}).Preload("MinecraftAccounts").Find(&actors).Error
 	if err != nil {
-		return nil, errors.Wrap(err, "fail to get actor ids")
+		return nil, errors.Wrap(err, "fail to get accepted actors")
 	}
-	return actorIds, nil
+	return actors, nil
+}
+
+type Usercache struct {
+	Name      string `json:"name"`
+	Uuid      string `json:"uuid"`
+	ExpiresOn string `json:"expiresOn"`
 }

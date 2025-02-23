@@ -8,9 +8,11 @@ require (
 )
 
 require (
+	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	github.com/syndtr/goleveldb v1.0.0 // indirect
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	golang.org/x/text v0.14.0 // indirect
 )
