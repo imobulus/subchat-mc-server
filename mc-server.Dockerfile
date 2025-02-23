@@ -10,6 +10,7 @@ ADD --link https://cdn.modrinth.com/data/Vebnzrzj/versions/6h9SnsZu/LuckPerms-Fa
 
 FROM golang:1.23.4 AS runscript
 WORKDIR /build
+RUN --mount=type=cache,target=/go/pkg GOBIN=/build go install github.com/liderman/leveldb-cli@latest
 COPY pkg/ pkg/
 WORKDIR /build/pkg/cmd/runserver
 RUN --mount=type=cache,target=/go/pkg go build -o runserver .
@@ -26,6 +27,7 @@ RUN echo eula=true > eula.txt
 RUN java -Xmx2G -jar fabric.jar --nogui --initSettings
 COPY --from=mods /mcserver/ ./
 COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
+COPY --from=runscript /build/leveldb-cli leveldb-cli
 COPY minecraft-server/easyauth.json mods/EasyAuth/config.json
 VOLUME /mcserver/player-lists
 RUN CONFFILES="banned-ips.json banned-players.json ops.json usercache.json whitelist.json"; \

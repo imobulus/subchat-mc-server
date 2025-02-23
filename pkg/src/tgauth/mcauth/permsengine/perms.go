@@ -2,6 +2,8 @@ package permsengine
 
 import (
 	"fmt"
+	"math/rand"
+	"regexp"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -26,6 +28,7 @@ type ServerPermsEngine struct {
 	dbExecutor    *authdb.AuthDbExecutor
 	acceptedChats map[authdb.TgChatId]struct{}
 	adminTags     map[string]struct{}
+	random        *rand.Rand
 }
 
 type ErrorAdminPermissionDenied struct {
@@ -55,8 +58,20 @@ func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.Aut
 		dbExecutor:    dbExecutor,
 		acceptedChats: acceptedChats,
 		adminTags:     adminTags,
+		random:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func (engine *ServerPermsEngine) GeneratePassword() string {
+	b := make([]rune, 20)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
+
 func (engine *ServerPermsEngine) IsAdmin(actorId authdb.ActorId) (bool, error) {
 	actor := authdb.Actor{ID: actorId}
 	err := engine.dbExecutor.GetActor(&actor)
@@ -209,6 +224,10 @@ func (engine *ServerPermsEngine) CheckRemoveMinecraftLoginPermission(
 	if err != nil {
 		return err
 	}
+	return checkActorHasLogin(&actor, login)
+}
+
+func checkActorHasLogin(actor *authdb.Actor, login authdb.MinecraftLogin) error {
 	loginFound := false
 	for _, acc := range actor.MinecraftAccounts {
 		if acc.ID == login {
@@ -217,7 +236,7 @@ func (engine *ServerPermsEngine) CheckRemoveMinecraftLoginPermission(
 		}
 	}
 	if !loginFound {
-		return ErrorNotYourLogin{actorId, login}
+		return ErrorNotYourLogin{actor.ID, login}
 	}
 	return nil
 }
@@ -322,4 +341,49 @@ type UuidsUpdate struct {
 
 func (engine *ServerPermsEngine) GetAcceptedActorsWithAccounts() ([]authdb.Actor, error) {
 	return engine.dbExecutor.GetAcceptedActorsWithAccounts()
+}
+
+var passwordRegex = regexp.MustCompile(`^[a-zA-Z0-9]{8,}$`)
+
+const passwordRegexDescription = "Пароль должен состоять из не менее 8 латинских букв и цифр"
+
+type ErrorInvalidPasswordFormat struct{}
+
+func (e ErrorInvalidPasswordFormat) Error() string {
+	return "invalid password format"
+}
+func (e ErrorInvalidPasswordFormat) Is(target error) bool {
+	_, ok := target.(ErrorInvalidPasswordFormat)
+	return ok
+}
+func (e ErrorInvalidPasswordFormat) Describe() string {
+	return passwordRegexDescription
+}
+
+func (engine *ServerPermsEngine) CheckSetPasswordPermission(actorId authdb.ActorId, login authdb.MinecraftLogin, password string) error {
+	actor := authdb.Actor{ID: actorId}
+	err := engine.dbExecutor.GetActor(&actor)
+	if err != nil {
+		return err
+	}
+	hasLoginErr := checkActorHasLogin(&actor, login)
+	if hasLoginErr != nil {
+		return hasLoginErr
+	}
+	if !passwordRegex.MatchString(password) {
+		return ErrorInvalidPasswordFormat{}
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) SetPassword(actorId authdb.ActorId, minecraftLogin authdb.MinecraftLogin, password string) error {
+	err := engine.CheckSetPasswordPermission(actorId, minecraftLogin, password)
+	if err != nil {
+		return errors.Wrap(err, "failed to check permission to set password")
+	}
+	err = engine.dbExecutor.SetPassword(minecraftLogin, password)
+	if err != nil {
+		return errors.Wrap(err, "failed to set password")
+	}
+	return nil
 }

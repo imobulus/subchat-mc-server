@@ -13,47 +13,60 @@ import (
 
 	"github.com/imobulus/subchat-mc-server/src/mcprocess"
 	"github.com/pkg/errors"
-	"github.com/syndtr/goleveldb/leveldb"
 	"go.uber.org/zap"
 )
 
 type PropertiesOverrides map[string]string
 
 type Config struct {
-	PropertiesPath    string                    `yaml:"properties path"`
-	ServerProperties  PropertiesOverrides       `yaml:"server properties"`
-	CommandsPort      int                       `yaml:"commands port"`
-	AuthDbPath        string                    `yaml:"auth db path"`
-	UserCachePath     string                    `yaml:"user cache path"`
-	JavaProcessConfig mcprocess.McProcessConfig `yaml:"java process config"`
+	PropertiesPath         string                    `yaml:"properties path"`
+	ServerProperties       PropertiesOverrides       `yaml:"server properties"`
+	CommandsPort           int                       `yaml:"commands port"`
+	AuthDbPath             string                    `yaml:"auth db path"`
+	UserCachePath          string                    `yaml:"user cache path"`
+	WhitelistPath          string                    `yaml:"whitelist path"`
+	JavaProcessConfig      mcprocess.McProcessConfig `yaml:"java process config"`
+	CheckAccountsFrequency time.Duration             `yaml:"check accounts frequency"`
 }
 
 var DefaultConfig = Config{
-	PropertiesPath:    "server.properties",
-	CommandsPort:      8080,
-	AuthDbPath:        "mods/EasyAuth/levelDBStore",
-	UserCachePath:     "usercache.json",
-	JavaProcessConfig: mcprocess.DefaultMcProcessConfig,
+	PropertiesPath:         "server.properties",
+	CommandsPort:           8080,
+	AuthDbPath:             "mods/EasyAuth/levelDBStore",
+	UserCachePath:          "usercache.json",
+	WhitelistPath:          "whitelist.json",
+	JavaProcessConfig:      mcprocess.DefaultMcProcessConfig,
+	CheckAccountsFrequency: 2 * time.Second,
 }
 
 type Server struct {
-	config      Config
-	javaProcess *mcprocess.McProcessHolder
-	wg          *sync.WaitGroup
-	doneC       chan struct{}
-	logger      *zap.Logger
-	ctx         context.Context
-	cancel      context.CancelFunc
+	config         Config
+	javaProcess    *mcprocess.McProcessHolder
+	accountManager *AccountManager
+	wg             *sync.WaitGroup
+	doneC          chan struct{}
+	logger         *zap.Logger
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
-func NewServer(config Config, logger *zap.Logger) *Server {
-	return &Server{
-		config:      config,
-		javaProcess: mcprocess.NewMcProcessHolder(config.JavaProcessConfig, logger),
-		wg:          &sync.WaitGroup{},
-		doneC:       make(chan struct{}),
-		logger:      logger,
+func NewServer(config Config, logger *zap.Logger) (*Server, error) {
+	javaProcess := mcprocess.NewMcProcessHolder(config.JavaProcessConfig, logger)
+	accountManager := NewAccountManager(
+		config.WhitelistPath,
+		config.CheckAccountsFrequency,
+		javaProcess.Exec,
+		logger,
+	)
+	s := &Server{
+		config:         config,
+		javaProcess:    javaProcess,
+		accountManager: accountManager,
+		wg:             &sync.WaitGroup{},
+		doneC:          make(chan struct{}),
+		logger:         logger,
 	}
+	return s, nil
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -75,6 +88,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.watchJava()
 	s.runServer()
 	go s.watchWg()
+	s.accountManager.runAccountManager(ctx)
 	success = true
 	return nil
 }
@@ -159,40 +173,52 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleUserCache(w http.ResponseWriter, r *http.Request) {
-	userCacheBytes, err := os.ReadFile(s.config.UserCachePath)
+func (s *Server) handleSetWhitelist(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("cannot read user cache", zap.Error(err))
+		s.logger.Error("cannot read body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(userCacheBytes)
+	var accounts []string
+	err = json.Unmarshal(bodyBytes, &accounts)
+	if err != nil {
+		s.logger.Error("cannot unmarshal accounts", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	err = s.accountManager.SetNeededAccounts(accounts)
+	if err != nil {
+		s.logger.Error("cannot set needed accounts", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleRegisteredUsers(w http.ResponseWriter, r *http.Request) {
-	db, err := leveldb.OpenFile(s.config.AuthDbPath, nil)
+func (s *Server) handleSetPasswords(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		s.logger.Error("cannot open db", zap.Error(err))
+		s.logger.Error("cannot read body", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
-	iter := db.NewIterator(nil, nil)
-	defer iter.Release()
-	w.Header().Set("Content-Type", "application/json")
-	ids := make([]string, 0, 10)
-	for iter.Next() {
-		idKey := string(iter.Key())
-		ids = append(ids, strings.TrimPrefix(idKey, "UUID:"))
-	}
-	content, err := json.Marshal(ids)
+	var accountPasswords map[string]string
+	err = json.Unmarshal(bodyBytes, &accountPasswords)
 	if err != nil {
-		s.logger.Error("cannot marshal ids", zap.Error(err))
+		s.logger.Error("cannot unmarshal account passwords", zap.Error(err))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	err = s.accountManager.SetAccountPasswords(accountPasswords)
+	if err != nil {
+		s.logger.Error("cannot set passwords", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Write(content)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
@@ -203,10 +229,28 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.handleCommand(w, r)
-	case "/usercache":
-		s.handleUserCache(w, r)
-	case "/registered_users":
-		s.handleRegisteredUsers(w, r)
+	case "/set-whitelist":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleSetWhitelist(w, r)
+	case "/set-passwords":
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleSetPasswords(w, r)
+	case "/offline-uuid":
+		defer r.Body.Close()
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			s.logger.Error("cannot read body", zap.Error(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		playerUuid := getOfflineUuid(string(bodyBytes))
+		w.Write([]byte(playerUuid.String()))
 	case "/shutdown":
 		s.cancel()
 		w.WriteHeader(http.StatusOK)

@@ -6,5 +6,7 @@ server properties:
   difficulty: hard
   motd: Subchat Server
   spawn-protection: "0"
-  online-mode: true
+  online-mode: false
   enforce-secure-profile: false
+  white-list: true
+  enforse-whitelist: true

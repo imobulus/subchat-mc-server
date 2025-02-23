@@ -1,7 +1,10 @@
 package authdb
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -319,8 +322,23 @@ func (authdb *AuthDbExecutor) GetAcceptedActorsWithAccounts() ([]Actor, error) {
 	return actors, nil
 }
 
-type Usercache struct {
-	Name      string `json:"name"`
-	Uuid      string `json:"uuid"`
-	ExpiresOn string `json:"expiresOn"`
+func (authdb *AuthDbExecutor) SetPassword(login MinecraftLogin, password string) error {
+	authdb.logger.Debug("setting password", zap.String("login", string(login)))
+	body, err := json.Marshal(map[string]string{string(login): password})
+	if err != nil {
+		return errors.Wrap(err, "fail to marshal password")
+	}
+	client := http.Client{}
+	req, err := http.NewRequest("POST", authdb.config.ServerOverseerUrl+"/set-passwords", bytes.NewReader(body))
+	if err != nil {
+		return errors.Wrap(err, "fail to create request")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "fail to send request")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("bad response status %d", resp.StatusCode)
+	}
+	return nil
 }

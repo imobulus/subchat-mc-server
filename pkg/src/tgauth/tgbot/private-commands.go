@@ -144,6 +144,16 @@ func (handler *AddMinecraftLoginHandler) HandleUpdate(update *tgbotapi.Update, a
 	}
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт добавлен")
 	handler.bot.SendLog(msg)
+	newPassword := handler.bot.permsEngine.GeneratePassword()
+	err = handler.bot.permsEngine.SetPassword(actor.ID, login, newPassword)
+	if err != nil {
+		return nil, err
+	}
+	msg = tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+		"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /new-pssword",
+		login, newPassword,
+	))
+	handler.bot.SendLog(msg)
 	return nil, nil
 }
 

@@ -49,8 +49,11 @@ func runserver(config mcserver.Config, logger *zap.Logger) error {
 	logger.Info("starting server")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	server := mcserver.NewServer(config, logger)
-	err := server.Start(ctx)
+	server, err := mcserver.NewServer(config, logger)
+	if err != nil {
+		return errors.Wrapf(err, "cannot create server")
+	}
+	err = server.Start(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "cannot start server")
 	}
