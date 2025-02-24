@@ -1,6 +1,7 @@
 domains:
-  - "imobul.us"
-  - "wsl"
+  - subchat.imobul.us
+  - imobulus-ovh
+  - wsl
 
 addresses:
   - mc-server:25565

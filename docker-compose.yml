@@ -10,8 +10,18 @@ secrets:
   tgbot-secret:
     file: ${SECRETS_PATH:-secrets}/tgbot.json
 
+networks:
+  subchat-ip6net:
+    enable_ipv6: true
+  subchat-internal:
+    internal: true
+  external:
+
 services:
   mc-server:
+    networks:
+      - subchat-ip6net
+      - subchat-internal
     build:
       context: .
       dockerfile: mc-server.Dockerfile
@@ -37,6 +47,9 @@ services:
         target: /mcserver/mods/EasyAuth/levelDBStore
     user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
   mc-proxy:
+    networks:
+      - subchat-internal
+      - external # need to bind
     build:
       context: .
       dockerfile: mc-proxy.Dockerfile
@@ -49,6 +62,9 @@ services:
         read_only: true
     user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
   tg-bot:
+    networks:
+      - subchat-internal
+      - external
     build:
       context: .
       dockerfile: tg-bot.Dockerfile
