@@ -19,10 +19,10 @@ type AccountManager struct {
 	execFunc       func(string) error
 
 	// nil means not set
-	neededAccounts        map[mojang.MinecraftLogin]struct{}
+	neededAccounts        map[MinecraftAccountSpec]struct{}
 	accountPasswordsToSet map[mojang.MinecraftLogin]string
 
-	allAccountsRequests     chan []mojang.MinecraftLogin
+	allAccountsRequests     chan []MinecraftAccountSpec
 	accountPasswordRequests chan map[mojang.MinecraftLogin]string
 
 	logger *zap.Logger
@@ -40,7 +40,7 @@ func NewAccountManager(
 		execFunc:                execFunc,
 		neededAccounts:          nil,
 		accountPasswordsToSet:   make(map[mojang.MinecraftLogin]string),
-		allAccountsRequests:     make(chan []mojang.MinecraftLogin),
+		allAccountsRequests:     make(chan []MinecraftAccountSpec),
 		accountPasswordRequests: make(chan map[mojang.MinecraftLogin]string),
 		logger:                  logger,
 	}
@@ -59,7 +59,7 @@ func (manager *AccountManager) accountManagerLoop() {
 		case <-manager.ctx.Done():
 			return
 		case newAccounts := <-manager.allAccountsRequests:
-			manager.neededAccounts = make(map[mojang.MinecraftLogin]struct{}, len(manager.neededAccounts))
+			manager.neededAccounts = make(map[MinecraftAccountSpec]struct{}, len(manager.neededAccounts))
 			for _, account := range newAccounts {
 				manager.neededAccounts[account] = struct{}{}
 			}
@@ -95,7 +95,10 @@ func RandStringRunes(n int) string {
 func (manager *AccountManager) setPasswords() {
 	for account, password := range manager.accountPasswordsToSet {
 		accountUuid := mojang.GetOfflineUuid(account).String()
-		if _, ok := manager.neededAccounts[account]; !ok {
+		if _, ok := manager.neededAccounts[MinecraftAccountSpec{
+			Name:     account,
+			PlayerId: accountUuid, // passwords only needed for offline accounts
+		}]; !ok {
 			// ignore setpassword for not needed account
 			continue
 		}
@@ -129,10 +132,10 @@ func sortWhitelist(whitelist []whitelistEntry) {
 
 func (manager *AccountManager) checkAccounts() {
 	whitelist := make([]whitelistEntry, 0, len(manager.neededAccounts))
-	for account := range manager.neededAccounts {
+	for accountSpec := range manager.neededAccounts {
 		whitelist = append(whitelist, whitelistEntry{
-			Name: account,
-			Uuid: mojang.GetOfflineUuid(account).String(),
+			Name: accountSpec.Name,
+			Uuid: accountSpec.PlayerId,
 		})
 	}
 	sortWhitelist(whitelist)
@@ -177,7 +180,7 @@ func (manager *AccountManager) checkAccounts() {
 	}
 }
 
-func (manager *AccountManager) SetNeededAccounts(accounts []mojang.MinecraftLogin) error {
+func (manager *AccountManager) SetNeededAccounts(accounts []MinecraftAccountSpec) error {
 	select {
 	case manager.allAccountsRequests <- accounts:
 		return nil

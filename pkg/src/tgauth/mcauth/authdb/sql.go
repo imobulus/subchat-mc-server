@@ -93,6 +93,7 @@ type MinecraftAccount struct {
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 	ActorID   *ActorId
 	IsOnline  bool
+	PlayerID  string
 }
 
 // used for AutoMigrate

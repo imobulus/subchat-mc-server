@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
@@ -80,11 +81,11 @@ func TestDbInteractions(t *testing.T) {
 
 func TestDoubleSave(t *testing.T) {
 	executor := initExecutor(t)
-	err := executor.AddMinecraftLogin(1, "test", true)
+	err := executor.AddMinecraftLogin(1, "test", false, mojang.GetOfflineUuid("test"))
 	if err != nil {
 		t.Fatalf("Failed to add minecraft login: %v", err)
 	}
-	err = executor.AddMinecraftLogin(2, "test", true)
+	err = executor.AddMinecraftLogin(2, "test", true, mojang.GetOfflineUuid("test"))
 	if !errors.Is(err, ErrorLoginTaken{}) {
 		t.Fatalf("Double save should fail")
 	}

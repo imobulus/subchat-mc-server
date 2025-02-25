@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/google/uuid"
 	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
@@ -128,6 +129,7 @@ type AddMinecraftLoginHandler struct {
 	initialized  bool
 	enteredLogin mojang.MinecraftLogin
 	isOnline     bool // defaults to offline
+	onlineId     uuid.UUID
 }
 
 func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
@@ -211,7 +213,7 @@ func (handler *AddMinecraftLoginHandler) processLogin(update *tgbotapi.Update, a
 	handler.enteredLogin = login
 	needOnlineRequest := true
 	disclaimer := "\n\nОбратите внимание, что если владелец официального аккаунта с этим именем присоединится к серверу, вам придётся сменить ник."
-	_, err = mojang.QueryOnlineUuid(login, handler.bot.ctx)
+	playerId, err := mojang.QueryOnlineUuid(login, handler.bot.ctx)
 	if err != nil {
 		if errors.Is(err, mojang.NoSuchPlayerErr{}) {
 			needOnlineRequest = false
@@ -223,6 +225,7 @@ func (handler *AddMinecraftLoginHandler) processLogin(update *tgbotapi.Update, a
 			))
 		}
 	} else {
+		handler.onlineId = playerId
 		handler.bot.SendLog(tgbotapi.NewMessage(
 			update.Message.Chat.ID,
 			fmt.Sprintf("Найден официальный аккаунт с именем %s. ", login)+
@@ -251,7 +254,21 @@ func (handler *AddMinecraftLoginHandler) processIsOnline(update *tgbotapi.Update
 }
 
 func (handler *AddMinecraftLoginHandler) finishAdding(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
-	err := handler.bot.permsEngine.AssignMinecraftLogin(actor.ID, handler.enteredLogin, handler.isOnline)
+	var playerId uuid.UUID
+	if handler.isOnline {
+		if handler.onlineId == uuid.Nil {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+				"Не получилось найти ID игрока %s из-за неизвестной ошибки. Обратитесь к администратору.",
+				handler.enteredLogin,
+			))
+			handler.bot.SendLog(msg)
+			return nil, nil
+		}
+		playerId = handler.onlineId
+	} else {
+		playerId = mojang.GetOfflineUuid(handler.enteredLogin)
+	}
+	err := handler.bot.permsEngine.AssignMinecraftLogin(actor.ID, handler.enteredLogin, handler.isOnline, playerId)
 	if err != nil {
 		if errors.Is(err, authdb.ErrorLoginTaken{}) {
 			handler.handleLoginExists(update, handler.enteredLogin)
@@ -274,16 +291,18 @@ func (handler *AddMinecraftLoginHandler) finishAdding(update *tgbotapi.Update, a
 	}
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт добавлен")
 	handler.bot.SendLog(msg)
-	newPassword := handler.bot.permsEngine.GeneratePassword()
-	err = handler.bot.permsEngine.SetPassword(actor.ID, handler.enteredLogin, newPassword)
-	if err != nil {
-		return nil, err
+	if !handler.isOnline {
+		newPassword := handler.bot.permsEngine.GeneratePassword()
+		err = handler.bot.permsEngine.SetPassword(actor.ID, handler.enteredLogin, newPassword)
+		if err != nil {
+			return nil, err
+		}
+		msg = tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
+			"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /newpassword",
+			handler.enteredLogin, newPassword,
+		))
+		handler.bot.SendLog(msg)
 	}
-	msg = tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
-		"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /newpassword",
-		handler.enteredLogin, newPassword,
-	))
-	handler.bot.SendLog(msg)
 	return nil, nil
 }
 

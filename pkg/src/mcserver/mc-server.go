@@ -174,6 +174,11 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+type MinecraftAccountSpec struct {
+	Name     mojang.MinecraftLogin `json:"name"`
+	PlayerId string                `json:"player_id"`
+}
+
 func (s *Server) handleSetWhitelist(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -182,7 +187,7 @@ func (s *Server) handleSetWhitelist(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	var accounts []mojang.MinecraftLogin
+	var accounts []MinecraftAccountSpec
 	err = json.Unmarshal(bodyBytes, &accounts)
 	if err != nil {
 		s.logger.Error("cannot unmarshal accounts", zap.Error(err))

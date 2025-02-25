@@ -7,6 +7,8 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/google/uuid"
+	"github.com/imobulus/subchat-mc-server/src/mcserver"
 	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/pkg/errors"
@@ -185,12 +187,13 @@ func (engine *ServerPermsEngine) AssignMinecraftLogin(
 	actorId authdb.ActorId,
 	login mojang.MinecraftLogin,
 	isOnline bool,
+	uuid uuid.UUID,
 ) error {
 	err := engine.CheckAddMinecraftLoginPermission(actorId)
 	if err != nil {
 		return errors.Wrap(err, "failed to check permission")
 	}
-	err = engine.dbExecutor.AddMinecraftLogin(actorId, login, isOnline)
+	err = engine.dbExecutor.AddMinecraftLogin(actorId, login, isOnline, uuid)
 	if err != nil {
 		return errors.Wrap(err, "failed to add minecraft login")
 	}
@@ -354,13 +357,16 @@ func (engine *ServerPermsEngine) UpdateWhitelist() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get accepted actors with accounts")
 	}
-	logins := make([]mojang.MinecraftLogin, 0, len(actors))
+	accounts := make([]mcserver.MinecraftAccountSpec, 0, len(actors))
 	for _, actor := range actors {
 		for _, acc := range actor.MinecraftAccounts {
-			logins = append(logins, acc.ID)
+			accounts = append(accounts, mcserver.MinecraftAccountSpec{
+				Name:     acc.ID,
+				PlayerId: acc.PlayerID,
+			})
 		}
 	}
-	err = engine.dbExecutor.SetWhitelist(logins)
+	err = engine.dbExecutor.SetWhitelist(accounts)
 	if err != nil {
 		return errors.Wrap(err, "failed to set whitelist")
 	}

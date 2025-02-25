@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/google/uuid"
+	"github.com/imobulus/subchat-mc-server/src/mcserver"
 	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -216,7 +218,7 @@ func (authdb *AuthDbExecutor) OptionalGetMinecraftAccount(login mojang.Minecraft
 }
 
 // adds minecraft login to actor. Each login must only belong to single actor.
-func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login mojang.MinecraftLogin, isOnline bool) error {
+func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login mojang.MinecraftLogin, isOnline bool, playerId uuid.UUID) error {
 	authdb.logger.Debug("adding minecraft login", zap.Uint("actor_id", uint(actorId)), zap.String("login", string(login)))
 	minecraftAccount := MinecraftAccount{
 		ID: login,
@@ -242,6 +244,7 @@ func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login mojang.Mi
 
 	minecraftAccount.ActorID = &actorId
 	minecraftAccount.IsOnline = isOnline
+	minecraftAccount.PlayerID = playerId.String()
 	result = authdb.db.Where("actor_id IS NULL").Select("*").Updates(&minecraftAccount)
 	err = result.Error
 	if err != nil {
@@ -346,7 +349,7 @@ func (authdb *AuthDbExecutor) GetAcceptedActorsWithAccounts() ([]Actor, error) {
 	return actors, nil
 }
 
-func (authdb *AuthDbExecutor) SetWhitelist(logins []mojang.MinecraftLogin) error {
+func (authdb *AuthDbExecutor) SetWhitelist(logins []mcserver.MinecraftAccountSpec) error {
 	// authdb.logger.Debug("setting logins", zap.Any("logins", logins))
 	body, err := json.Marshal(logins)
 	if err != nil {
