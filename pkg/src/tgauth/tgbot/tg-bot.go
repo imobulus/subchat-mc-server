@@ -214,7 +214,7 @@ func (bot *TgBot) handleUpdate(update tgbotapi.Update) {
 	bot.chatHandlersMx.Lock()
 	chatHandler, ok := bot.chatHandlersMap[sessionId]
 	if !ok {
-		chatHandler = bot.createChatHandler(chat, from, sessionId)
+		chatHandler = bot.createChatHandler(chat, sessionId)
 		if chatHandler == nil {
 			bot.logger.Error("chatHandler is nil")
 			bot.chatHandlersMx.Unlock()
@@ -228,7 +228,7 @@ func (bot *TgBot) handleUpdate(update tgbotapi.Update) {
 	go func() {
 		defer bot.wg.Done()
 		bot.handleChatMessageUpdate(chatHandler, &update)
-		bot.handleNewInteractiveCommands(chatHandler, &update)
+		bot.handleNewInteractiveCommands(chatHandler)
 		chatHandler.handlerMx.Unlock()
 		bot.handleCleanup(chatHandler)
 	}()
@@ -247,7 +247,7 @@ func (bot *TgBot) handleCleanup(chatHandler *ChatHandler) {
 	}
 }
 
-func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat, from *tgbotapi.User, id InteractiveSessionId) *ChatHandler {
+func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat, id InteractiveSessionId) *ChatHandler {
 	if chat.Type == "private" {
 		return &ChatHandler{
 			id:        id,
@@ -334,9 +334,9 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 	}
 }
 
-func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler, update *tgbotapi.Update) {
+func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler) {
 	if chatHandler.currentHandler == nil {
-		err := bot.aux.DeleteMyCommands(chatHandler.GetScope(), nil)
+		err := bot.aux.SetMyCommands(NewPrivateChatHandler(bot).GetCommands(), chatHandler.GetScope(), nil)
 		if err != nil {
 			bot.logger.Error("Failed to delete commands", zap.Error(err))
 		}

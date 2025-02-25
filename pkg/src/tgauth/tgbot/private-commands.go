@@ -11,6 +11,7 @@ import (
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"
+	"go.uber.org/zap"
 )
 
 type PrivateChatHandler struct {
@@ -135,18 +136,11 @@ type AddMinecraftLoginHandler struct {
 func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	if !handler.initialized {
 		handler.initialized = true
-		loginStrings := make([]string, 0, len(actor.MinecraftAccounts))
-		for _, acc := range actor.MinecraftAccounts {
-			loginStrings = append(loginStrings, string(acc.ID))
-		}
 		permissionDenied := false
 		replyBuilder := strings.Builder{}
-		if len(loginStrings) > 0 {
+		if len(actor.MinecraftAccounts) > 0 {
 			replyBuilder.WriteString("Ваши аккаунты:\n")
-			for _, login := range loginStrings {
-				replyBuilder.WriteString(login)
-				replyBuilder.WriteRune('\n')
-			}
+			replyBuilder.WriteString(buildMinecraftAccountsListForTg(actor.MinecraftAccounts))
 			replyBuilder.WriteRune('\n')
 		} else {
 			replyBuilder.WriteString("У вас нет зарегистрированных аккаунтов\n\n")
@@ -218,6 +212,7 @@ func (handler *AddMinecraftLoginHandler) processLogin(update *tgbotapi.Update, a
 		if errors.Is(err, mojang.NoSuchPlayerErr{}) {
 			needOnlineRequest = false
 		} else {
+			handler.bot.logger.Error("Failed to query online uuid", zap.Error(err))
 			handler.bot.SendLog(tgbotapi.NewMessage(
 				update.Message.Chat.ID,
 				fmt.Sprintf("Не получилось проверить есть ли официальный аккаунт с именем %s. ", login)+
@@ -326,6 +321,18 @@ type RevokeMinecraftLoginHandler struct {
 	bot *TgBot
 }
 
+func buildMinecraftAccountsListForTg(list []authdb.MinecraftAccount) string {
+	b := strings.Builder{}
+	for _, acc := range list {
+		b.WriteString(string(acc.ID))
+		if acc.IsOnline {
+			b.WriteString(" (официальный)")
+		}
+		b.WriteRune('\n')
+	}
+	return b.String()
+}
+
 func (handler *RevokeMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	if len(actor.MinecraftAccounts) == 0 {
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "У вас нет зарегистрированных аккаунтов")
@@ -334,10 +341,7 @@ func (handler *RevokeMinecraftLoginHandler) InitialHandle(update *tgbotapi.Updat
 	}
 	msgBuilder := strings.Builder{}
 	msgBuilder.WriteString("Введите аккаунт который хотите удалить\n")
-	for _, acc := range actor.MinecraftAccounts {
-		msgBuilder.WriteString(string(acc.ID))
-		msgBuilder.WriteRune('\n')
-	}
+	msgBuilder.WriteString(buildMinecraftAccountsListForTg(actor.MinecraftAccounts))
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgBuilder.String())
 	handler.bot.SendLog(msg)
 	return handler, nil
@@ -387,12 +391,14 @@ type NewPasswordHandler struct {
 }
 
 func (handler *NewPasswordHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	if len(actor.MinecraftAccounts) == 0 {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "У вас нет зарегистрированных аккаунтов")
+		handler.bot.SendLog(msg)
+		return nil, nil
+	}
 	respBuilder := strings.Builder{}
 	respBuilder.WriteString("Введите аккаунт для которого хотите сгенерировать новый пароль.\n" + "Ваши аккаунты:\n")
-	for _, acc := range actor.MinecraftAccounts {
-		respBuilder.WriteString(string(acc.ID))
-		respBuilder.WriteRune('\n')
-	}
+	respBuilder.WriteString(buildMinecraftAccountsListForTg(actor.MinecraftAccounts))
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, respBuilder.String())
 	handler.bot.SendLog(msg)
 	return handler, nil
@@ -407,6 +413,23 @@ func (handler *NewPasswordHandler) HandleUpdate(update *tgbotapi.Update, actor *
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт содержит недопустимые символы или слишком короткий или длинный, введите другой")
 		handler.bot.SendLog(msg)
 		return handler, nil
+	}
+	var actorsAccount *authdb.MinecraftAccount
+	for _, acc := range actor.MinecraftAccounts {
+		if acc.ID == login {
+			actorsAccount = &acc
+			break
+		}
+	}
+	if actorsAccount == nil {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт не найден")
+		handler.bot.SendLog(msg)
+		return nil, nil
+	}
+	if actorsAccount.IsOnline {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Официальный аккаунт не")
+		handler.bot.SendLog(msg)
+		return nil, nil
 	}
 	newPassword := handler.bot.permsEngine.GeneratePassword()
 	err = handler.bot.permsEngine.SetPassword(actor.ID, login, newPassword)

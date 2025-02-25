@@ -60,30 +60,35 @@ func QueryOnlineUuid(login MinecraftLogin, ctx context.Context) (uuid.UUID, erro
 	if err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "failed to perform request")
 	}
-	if response.StatusCode != 200 {
-		return uuid.UUID{}, errors.Errorf("Mojang API returned %d", response.StatusCode)
-	}
-	var result map[string]string
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "failed to read response body")
+	}
+	if response.StatusCode == 404 {
+		var errNoPlayerBody struct {
+			Path  string `json:"path"`
+			Error string `json:"errorMessage"`
+		}
+		err = json.Unmarshal(bodyBytes, &errNoPlayerBody)
+		if err != nil {
+			return uuid.UUID{}, errors.Wrap(err, "failed to parse response body")
+		}
+		if errNoPlayerBody.Error == fmt.Sprintf("Couldn't find any profile with name %s", login) {
+			return uuid.UUID{}, NoSuchPlayerErr{login}
+		}
+		return uuid.UUID{}, errors.Errorf("Mojang API returned unexpected response: %v", errNoPlayerBody)
+	}
+	if response.StatusCode != 200 {
+		return uuid.UUID{}, errors.Errorf("Mojang API returned %d", response.StatusCode)
+	}
+	var result struct {
+		Id string `json:"id"`
 	}
 	err = json.Unmarshal(bodyBytes, &result)
 	if err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "failed to parse response body")
 	}
-	playerId, ok := result["id"]
-	if !ok {
-		errorMsg, ok := result["errorMessage"]
-		if !ok {
-			return uuid.UUID{}, errors.Errorf("Mojang API returned unexpected response: %v", result)
-		}
-		if errorMsg == fmt.Sprintf("Couldn't find any profile with name %s", login) {
-			return uuid.UUID{}, NoSuchPlayerErr{login}
-		}
-		return uuid.UUID{}, errors.Errorf("Mojang API returned error: %s", errorMsg)
-	}
-	uuidBytes, err := hex.DecodeString(playerId)
+	uuidBytes, err := hex.DecodeString(result.Id)
 	if err != nil {
 		return uuid.UUID{}, errors.Wrap(err, "failed to decode player ID")
 	}
