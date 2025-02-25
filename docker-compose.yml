@@ -74,4 +74,4 @@ services:
       - type: bind
         source: ${STORAGE_PATH:-storage}/bot-db
         target: /sqlite
-    user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
+    user: ${SERVER_USER}
