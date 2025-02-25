@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/pkg/errors"
 )
@@ -175,20 +176,21 @@ func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	return nil
 }
 
-func (engine *ServerPermsEngine) OptionalGetMinecraftAccount(login authdb.MinecraftLogin) (*authdb.MinecraftAccount, error) {
+func (engine *ServerPermsEngine) OptionalGetMinecraftAccount(login mojang.MinecraftLogin) (*authdb.MinecraftAccount, error) {
 	return engine.dbExecutor.OptionalGetMinecraftAccount(login)
 }
 
 // can return ErrorLoginTaken
-func (engine *ServerPermsEngine) AddMinecraftLogin(
+func (engine *ServerPermsEngine) AssignMinecraftLogin(
 	actorId authdb.ActorId,
-	login authdb.MinecraftLogin,
+	login mojang.MinecraftLogin,
+	isOnline bool,
 ) error {
 	err := engine.CheckAddMinecraftLoginPermission(actorId)
 	if err != nil {
 		return errors.Wrap(err, "failed to check permission")
 	}
-	err = engine.dbExecutor.AddMinecraftLogin(actorId, login)
+	err = engine.dbExecutor.AddMinecraftLogin(actorId, login, isOnline)
 	if err != nil {
 		return errors.Wrap(err, "failed to add minecraft login")
 	}
@@ -207,7 +209,7 @@ func (engine *ServerPermsEngine) UpdateTgUserInfo(tguser tgbotapi.User) error {
 
 type ErrorNotYourLogin struct {
 	ActorId authdb.ActorId
-	Login   authdb.MinecraftLogin
+	Login   mojang.MinecraftLogin
 }
 
 func (e ErrorNotYourLogin) Error() string {
@@ -219,9 +221,9 @@ func (e ErrorNotYourLogin) Is(target error) bool {
 	return ok
 }
 
-func (engine *ServerPermsEngine) CheckRemoveMinecraftLoginPermission(
+func (engine *ServerPermsEngine) CheckRevokeMinecraftLoginPermission(
 	actorId authdb.ActorId,
-	login authdb.MinecraftLogin,
+	login mojang.MinecraftLogin,
 ) error {
 	actor := authdb.Actor{ID: actorId}
 	err := engine.dbExecutor.GetActor(&actor)
@@ -231,7 +233,7 @@ func (engine *ServerPermsEngine) CheckRemoveMinecraftLoginPermission(
 	return checkActorHasLogin(&actor, login)
 }
 
-func checkActorHasLogin(actor *authdb.Actor, login authdb.MinecraftLogin) error {
+func checkActorHasLogin(actor *authdb.Actor, login mojang.MinecraftLogin) error {
 	loginFound := false
 	for _, acc := range actor.MinecraftAccounts {
 		if acc.ID == login {
@@ -245,17 +247,17 @@ func checkActorHasLogin(actor *authdb.Actor, login authdb.MinecraftLogin) error 
 	return nil
 }
 
-func (engine *ServerPermsEngine) RemoveMinecraftLogin(
+func (engine *ServerPermsEngine) RevokeMinecraftLogin(
 	actorId authdb.ActorId,
-	login authdb.MinecraftLogin,
+	login mojang.MinecraftLogin,
 ) error {
-	err := engine.CheckRemoveMinecraftLoginPermission(actorId, login)
+	err := engine.CheckRevokeMinecraftLoginPermission(actorId, login)
 	if err != nil {
 		return errors.Wrap(err, "failed to check permission")
 	}
-	err = engine.dbExecutor.RemoveMinecraftLogin(login)
+	err = engine.dbExecutor.RevokeMinecraftLogin(login)
 	if err != nil {
-		return errors.Wrap(err, "failed to remove minecraft login")
+		return errors.Wrap(err, "failed to revoke minecraft login")
 	}
 	return nil
 }
@@ -352,7 +354,7 @@ func (engine *ServerPermsEngine) UpdateWhitelist() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get accepted actors with accounts")
 	}
-	logins := make([]authdb.MinecraftLogin, 0, len(actors))
+	logins := make([]mojang.MinecraftLogin, 0, len(actors))
 	for _, actor := range actors {
 		for _, acc := range actor.MinecraftAccounts {
 			logins = append(logins, acc.ID)
@@ -382,7 +384,7 @@ func (e ErrorInvalidPasswordFormat) Describe() string {
 	return passwordRegexDescription
 }
 
-func (engine *ServerPermsEngine) CheckSetPasswordPermission(actorId authdb.ActorId, login authdb.MinecraftLogin, password string) error {
+func (engine *ServerPermsEngine) CheckSetPasswordPermission(actorId authdb.ActorId, login mojang.MinecraftLogin, password string) error {
 	actor := authdb.Actor{ID: actorId}
 	err := engine.dbExecutor.GetActor(&actor)
 	if err != nil {
@@ -398,7 +400,7 @@ func (engine *ServerPermsEngine) CheckSetPasswordPermission(actorId authdb.Actor
 	return nil
 }
 
-func (engine *ServerPermsEngine) SetPassword(actorId authdb.ActorId, minecraftLogin authdb.MinecraftLogin, password string) error {
+func (engine *ServerPermsEngine) SetPassword(actorId authdb.ActorId, minecraftLogin mojang.MinecraftLogin, password string) error {
 	err := engine.CheckSetPasswordPermission(actorId, minecraftLogin, password)
 	if err != nil {
 		return errors.Wrap(err, "failed to check permission to set password")

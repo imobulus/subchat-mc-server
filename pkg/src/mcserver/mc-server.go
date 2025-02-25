@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imobulus/subchat-mc-server/src/mcprocess"
+	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -181,7 +182,7 @@ func (s *Server) handleSetWhitelist(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	var accounts []string
+	var accounts []mojang.MinecraftLogin
 	err = json.Unmarshal(bodyBytes, &accounts)
 	if err != nil {
 		s.logger.Error("cannot unmarshal accounts", zap.Error(err))
@@ -205,7 +206,7 @@ func (s *Server) handleSetPasswords(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	var accountPasswords map[string]string
+	var accountPasswords map[mojang.MinecraftLogin]string
 	err = json.Unmarshal(bodyBytes, &accountPasswords)
 	if err != nil {
 		s.logger.Error("cannot unmarshal account passwords", zap.Error(err))
@@ -249,7 +250,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		playerUuid := getOfflineUuid(string(bodyBytes))
+		playerUuid := mojang.GetOfflineUuid(mojang.MinecraftLogin(bodyBytes))
 		w.Write([]byte(playerUuid.String()))
 	case "/shutdown":
 		s.cancel()

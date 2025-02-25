@@ -2,7 +2,6 @@ package mcserver
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -10,22 +9,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"go.uber.org/zap"
 )
-
-func getOfflineUuid(playerName string) uuid.UUID {
-	stringToHash := "OfflinePlayer:" + playerName
-	// get md5 hash of stringToHash
-	hash := md5.Sum([]byte(stringToHash))
-	hash[6] = hash[6]&0x0f | 0x30
-	hash[8] = hash[8]&0x3f | 0x80
-	uid, err := uuid.FromBytes(hash[:])
-	if err != nil {
-		panic("cannot create offline uuid")
-	}
-	return uid
-}
 
 type AccountManager struct {
 	whitelistPath  string
@@ -33,11 +19,11 @@ type AccountManager struct {
 	execFunc       func(string) error
 
 	// nil means not set
-	neededAccounts        map[string]struct{}
-	accountPasswordsToSet map[string]string
+	neededAccounts        map[mojang.MinecraftLogin]struct{}
+	accountPasswordsToSet map[mojang.MinecraftLogin]string
 
-	allAccountsRequests     chan []string
-	accountPasswordRequests chan map[string]string
+	allAccountsRequests     chan []mojang.MinecraftLogin
+	accountPasswordRequests chan map[mojang.MinecraftLogin]string
 
 	logger *zap.Logger
 	ctx    context.Context
@@ -53,9 +39,9 @@ func NewAccountManager(
 		checkFrequency:          checkFrequency,
 		execFunc:                execFunc,
 		neededAccounts:          nil,
-		accountPasswordsToSet:   make(map[string]string),
-		allAccountsRequests:     make(chan []string),
-		accountPasswordRequests: make(chan map[string]string),
+		accountPasswordsToSet:   make(map[mojang.MinecraftLogin]string),
+		allAccountsRequests:     make(chan []mojang.MinecraftLogin),
+		accountPasswordRequests: make(chan map[mojang.MinecraftLogin]string),
 		logger:                  logger,
 	}
 }
@@ -73,7 +59,7 @@ func (manager *AccountManager) accountManagerLoop() {
 		case <-manager.ctx.Done():
 			return
 		case newAccounts := <-manager.allAccountsRequests:
-			manager.neededAccounts = make(map[string]struct{}, len(manager.neededAccounts))
+			manager.neededAccounts = make(map[mojang.MinecraftLogin]struct{}, len(manager.neededAccounts))
 			for _, account := range newAccounts {
 				manager.neededAccounts[account] = struct{}{}
 			}
@@ -108,7 +94,7 @@ func RandStringRunes(n int) string {
 
 func (manager *AccountManager) setPasswords() {
 	for account, password := range manager.accountPasswordsToSet {
-		accountUuid := getOfflineUuid(account).String()
+		accountUuid := mojang.GetOfflineUuid(account).String()
 		if _, ok := manager.neededAccounts[account]; !ok {
 			// ignore setpassword for not needed account
 			continue
@@ -128,8 +114,8 @@ func (manager *AccountManager) setPasswords() {
 }
 
 type whitelistEntry struct {
-	Name string `json:"name"`
-	Uuid string `json:"uuid"`
+	Name mojang.MinecraftLogin `json:"name"`
+	Uuid string                `json:"uuid"`
 }
 
 func sortWhitelist(whitelist []whitelistEntry) {
@@ -146,7 +132,7 @@ func (manager *AccountManager) checkAccounts() {
 	for account := range manager.neededAccounts {
 		whitelist = append(whitelist, whitelistEntry{
 			Name: account,
-			Uuid: getOfflineUuid(account).String(),
+			Uuid: mojang.GetOfflineUuid(account).String(),
 		})
 	}
 	sortWhitelist(whitelist)
@@ -191,7 +177,7 @@ func (manager *AccountManager) checkAccounts() {
 	}
 }
 
-func (manager *AccountManager) SetNeededAccounts(accounts []string) error {
+func (manager *AccountManager) SetNeededAccounts(accounts []mojang.MinecraftLogin) error {
 	select {
 	case manager.allAccountsRequests <- accounts:
 		return nil
@@ -200,7 +186,7 @@ func (manager *AccountManager) SetNeededAccounts(accounts []string) error {
 	}
 }
 
-func (manager *AccountManager) SetAccountPasswords(accountPasswords map[string]string) error {
+func (manager *AccountManager) SetAccountPasswords(accountPasswords map[mojang.MinecraftLogin]string) error {
 	select {
 	case manager.accountPasswordRequests <- accountPasswords:
 		return nil

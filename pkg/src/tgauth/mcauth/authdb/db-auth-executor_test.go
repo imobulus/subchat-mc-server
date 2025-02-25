@@ -5,23 +5,37 @@ import (
 	"testing"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func TestDbInteractions(t *testing.T) {
+func initDb(t *testing.T) *gorm.DB {
 	os.Remove("test.db")
-	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
 	if err != nil {
 		t.Fatalf("Failed to open db: %v", err)
 	}
+	return db
+}
+
+func initExecutor(t *testing.T) *AuthDbExecutor {
+	db := initDb(t)
 	logger := zap.Must(zap.NewDevelopment())
 	executor, err := NewAuthDbExecutor(db, DefaultAuthDbExecutorConfig, logger)
 	if err != nil {
 		t.Fatalf("Failed to init db: %v", err)
 	}
-	err = executor.UpdateTgUserInfo(tgbotapi.User{
+	return executor
+}
+
+func TestDbInteractions(t *testing.T) {
+	executor := initExecutor(t)
+	err := executor.UpdateTgUserInfo(tgbotapi.User{
 		ID:        1,
 		FirstName: "Test",
 		LastName:  "User",
@@ -61,5 +75,17 @@ func TestDbInteractions(t *testing.T) {
 	err = executor.SeenInChat(actor.ID, 1)
 	if err != nil {
 		t.Fatalf("Failed to update seen in chat: %v", err)
+	}
+}
+
+func TestDoubleSave(t *testing.T) {
+	executor := initExecutor(t)
+	err := executor.AddMinecraftLogin(1, "test", true)
+	if err != nil {
+		t.Fatalf("Failed to add minecraft login: %v", err)
+	}
+	err = executor.AddMinecraftLogin(2, "test", true)
+	if !errors.Is(err, ErrorLoginTaken{}) {
+		t.Fatalf("Double save should fail")
 	}
 }

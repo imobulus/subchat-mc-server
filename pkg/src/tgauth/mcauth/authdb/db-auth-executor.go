@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -186,7 +187,7 @@ func (authdb *AuthDbExecutor) GetTgUser(user *TgUser) error {
 }
 
 type ErrorLoginTaken struct {
-	Login MinecraftLogin
+	Login mojang.MinecraftLogin
 }
 
 func (e ErrorLoginTaken) Error() string {
@@ -198,7 +199,7 @@ func (e ErrorLoginTaken) Is(target error) bool {
 	return ok
 }
 
-func (authdb *AuthDbExecutor) OptionalGetMinecraftAccount(login MinecraftLogin) (*MinecraftAccount, error) {
+func (authdb *AuthDbExecutor) OptionalGetMinecraftAccount(login mojang.MinecraftLogin) (*MinecraftAccount, error) {
 	var minecraftAccounts []MinecraftAccount
 	err := authdb.db.Find(&minecraftAccounts, login).Error
 	if err != nil {
@@ -215,28 +216,51 @@ func (authdb *AuthDbExecutor) OptionalGetMinecraftAccount(login MinecraftLogin) 
 }
 
 // adds minecraft login to actor. Each login must only belong to single actor.
-func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login MinecraftLogin) error {
+func (authdb *AuthDbExecutor) AddMinecraftLogin(actorId ActorId, login mojang.MinecraftLogin, isOnline bool) error {
 	authdb.logger.Debug("adding minecraft login", zap.Uint("actor_id", uint(actorId)), zap.String("login", string(login)))
 	minecraftAccount := MinecraftAccount{
-		ID:      login,
-		ActorID: actorId,
+		ID: login,
 	}
-	err := authdb.db.Save(&minecraftAccount).Error
+	result := authdb.db.Model(&minecraftAccount).Find(&minecraftAccount)
+	err := result.Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return ErrorLoginTaken{login}
+		return errors.Wrapf(err, "fail to find minecraft account %s", login)
+	}
+	if result.RowsAffected == 0 {
+		result = authdb.db.Create(&minecraftAccount)
+		err = result.Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) {
+				// race, somebody else has created this account
+				return ErrorLoginTaken{
+					Login: login,
+				}
+			}
+			return errors.Wrapf(err, "fail to create minecraft account %s", login)
 		}
+	}
+
+	minecraftAccount.ActorID = &actorId
+	minecraftAccount.IsOnline = isOnline
+	result = authdb.db.Where("actor_id IS NULL").Select("*").Updates(&minecraftAccount)
+	err = result.Error
+	if err != nil {
 		return errors.Wrapf(err, "fail to create minecraft account %s for actor %d", login, actorId)
+	}
+	if result.RowsAffected == 0 {
+		return ErrorLoginTaken{
+			Login: login,
+		}
 	}
 	return nil
 }
 
-func (authdb *AuthDbExecutor) RemoveMinecraftLogin(login MinecraftLogin) error {
+func (authdb *AuthDbExecutor) RevokeMinecraftLogin(login mojang.MinecraftLogin) error {
 	authdb.logger.Debug("removing minecraft login", zap.String("login", string(login)))
 	account := &MinecraftAccount{ID: login}
-	err := authdb.db.Delete(account).Error
+	err := authdb.db.Save(account).Error
 	if err != nil {
-		return errors.Wrapf(err, "fail to remove minecraft account %s", login)
+		return errors.Wrapf(err, "fail to revoke minecraft account %s", login)
 	}
 	return nil
 }
@@ -322,7 +346,7 @@ func (authdb *AuthDbExecutor) GetAcceptedActorsWithAccounts() ([]Actor, error) {
 	return actors, nil
 }
 
-func (authdb *AuthDbExecutor) SetWhitelist(logins []MinecraftLogin) error {
+func (authdb *AuthDbExecutor) SetWhitelist(logins []mojang.MinecraftLogin) error {
 	// authdb.logger.Debug("setting logins", zap.Any("logins", logins))
 	body, err := json.Marshal(logins)
 	if err != nil {
@@ -343,7 +367,7 @@ func (authdb *AuthDbExecutor) SetWhitelist(logins []MinecraftLogin) error {
 	return nil
 }
 
-func (authdb *AuthDbExecutor) SetPassword(login MinecraftLogin, password string) error {
+func (authdb *AuthDbExecutor) SetPassword(login mojang.MinecraftLogin, password string) error {
 	authdb.logger.Debug("setting password", zap.String("login", string(login)))
 	body, err := json.Marshal(map[string]string{string(login): password})
 	if err != nil {

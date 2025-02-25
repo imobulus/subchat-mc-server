@@ -3,10 +3,10 @@ package authdb
 import (
 	"database/sql/driver"
 	"fmt"
-	"regexp"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"gorm.io/gorm"
 )
 
@@ -32,25 +32,6 @@ func (t *TgChatId) Scan(value interface{}) error {
 // Value implements the driver Valuer interface for TgChatId
 func (t TgChatId) Value() (driver.Value, error) {
 	return int64(t), nil
-}
-
-type MinecraftLogin string
-
-var minecraftLoginRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]{3,16}$`)
-
-type InvalidMinecraftLoginErr struct {
-	Login string
-}
-
-func (e InvalidMinecraftLoginErr) Error() string {
-	return fmt.Sprintf("Invalid minecraft login: %s, must match %s", e.Login, minecraftLoginRegexp.String())
-}
-
-func MakeMinecraftLogin(s string) (MinecraftLogin, error) {
-	if !minecraftLoginRegexp.Match([]byte(s)) {
-		return "", InvalidMinecraftLoginErr{s}
-	}
-	return MinecraftLogin(s), nil
 }
 
 type Actor struct {
@@ -106,11 +87,12 @@ func ShortDescribeTgUser(u tgbotapi.User) string {
 }
 
 type MinecraftAccount struct {
-	ID        MinecraftLogin `gorm:"primarykey"` // minecraft id
+	ID        mojang.MinecraftLogin `gorm:"primarykey"` // minecraft id
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
-	ActorID   ActorId
+	ActorID   *ActorId
+	IsOnline  bool
 }
 
 // used for AutoMigrate
