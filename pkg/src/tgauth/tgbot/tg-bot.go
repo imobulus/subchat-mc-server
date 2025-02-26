@@ -255,8 +255,11 @@ func (bot *TgBot) createChatHandler(chat *tgbotapi.Chat, id InteractiveSessionId
 			isPrivate: true,
 		}
 	}
-	bot.logger.Error("chat.Type is not private, NOT IMPLEMENTED")
-	return nil
+	return &ChatHandler{
+		id:        id,
+		handlerMx: &sync.Mutex{},
+		isPrivate: false,
+	}
 }
 
 func (bot *TgBot) HandleUpdateError(update *tgbotapi.Update, err error) {
@@ -270,6 +273,10 @@ func (bot *TgBot) HandleUpdateError(update *tgbotapi.Update, err error) {
 
 func MakePrivateChatHandler(bot *TgBot) InteractiveHandler {
 	return NewCommonHandleWrapper(NewPrivateChatHandler(bot))
+}
+
+func MakePublicChatHandler(bot *TgBot) InteractiveHandler {
+	return NewPublicChatHandler(bot)
 }
 
 func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbotapi.Update) {

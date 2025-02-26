@@ -15,10 +15,9 @@ import (
 )
 
 type ServerPermsEngineConfig struct {
-	CacheInvalidationDuration   time.Duration     `yaml:"cache_invalidation_duration"`
-	DefaultMinecraftLoginsLimit int               `yaml:"default_minecraft_logins_limit"`
-	AdminTags                   []string          `yaml:"admin_tags"`
-	AcceptedCahats              []authdb.TgChatId `yaml:"accepted_chats"`
+	CacheInvalidationDuration   time.Duration `yaml:"cache_invalidation_duration"`
+	DefaultMinecraftLoginsLimit int           `yaml:"default_minecraft_logins_limit"`
+	AdminTags                   []string      `yaml:"admin_tags"`
 }
 
 var DefaultServerPermsEngineConfig = ServerPermsEngineConfig{
@@ -27,11 +26,10 @@ var DefaultServerPermsEngineConfig = ServerPermsEngineConfig{
 }
 
 type ServerPermsEngine struct {
-	config        ServerPermsEngineConfig
-	dbExecutor    *authdb.AuthDbExecutor
-	acceptedChats map[authdb.TgChatId]struct{}
-	adminTags     map[string]struct{}
-	random        *rand.Rand
+	config     ServerPermsEngineConfig
+	dbExecutor *authdb.AuthDbExecutor
+	adminTags  map[string]struct{}
+	random     *rand.Rand
 }
 
 type ErrorAdminPermissionDenied struct {
@@ -48,20 +46,15 @@ func (e ErrorAdminPermissionDenied) Is(target error) bool {
 }
 
 func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.AuthDbExecutor) (*ServerPermsEngine, error) {
-	acceptedChats := map[authdb.TgChatId]struct{}{}
-	for _, chat := range config.AcceptedCahats {
-		acceptedChats[chat] = struct{}{}
-	}
 	adminTags := map[string]struct{}{}
 	for _, tag := range config.AdminTags {
 		adminTags[tag] = struct{}{}
 	}
 	return &ServerPermsEngine{
-		config:        config,
-		dbExecutor:    dbExecutor,
-		acceptedChats: acceptedChats,
-		adminTags:     adminTags,
-		random:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		config:     config,
+		dbExecutor: dbExecutor,
+		adminTags:  adminTags,
+		random:     rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -275,7 +268,7 @@ func (engine *ServerPermsEngine) computeActorAcceptedStatus(actor *authdb.Actor)
 		}
 	}
 	for _, chat := range actor.SeenInChats {
-		if _, ok := engine.acceptedChats[chat.ID]; ok {
+		if chat.Approved {
 			return true
 		}
 	}
@@ -415,5 +408,26 @@ func (engine *ServerPermsEngine) SetPassword(actorId authdb.ActorId, minecraftLo
 	if err != nil {
 		return errors.Wrap(err, "failed to set password")
 	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) CheckApproveChatPermission(actorId authdb.ActorId) error {
+	actor := authdb.Actor{ID: actorId}
+	err := engine.dbExecutor.GetActor(&actor)
+	if err != nil {
+		return err
+	}
+	if !actor.IsAdmin {
+		return ErrorAdminPermissionDenied{"can't approve chat"}
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) ApproveChat(actorId authdb.ActorId, chatId authdb.TgChatId) error {
+	err := engine.CheckApproveChatPermission(actorId)
+	if err != nil {
+		return errors.Wrap(err, "failed to check permission to approve chat")
+	}
+	engine.dbExecutor.ApproveChat(chatId, actorId)
 	return nil
 }

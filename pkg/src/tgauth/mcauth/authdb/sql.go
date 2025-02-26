@@ -53,10 +53,6 @@ type Actor struct {
 	CustomMinecraftLoginLimit *int
 }
 
-type TgChat struct {
-	ID TgChatId
-}
-
 type ActorSeenInChats struct {
 	TgChatID  TgChatId `gorm:"primarykey"`
 	ActorID   uint     `gorm:"primarykey"`
@@ -91,9 +87,18 @@ type MinecraftAccount struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
-	ActorID   *ActorId
+	ActorID   *ActorId       // owner, if any
 	IsOnline  bool
 	PlayerID  string
+}
+
+type TgChat struct {
+	ID         TgChatId `gorm:"primarykey"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
+	Approved   bool           // if approved
+	ApprovedBy ActorId        // who approved
 }
 
 // used for AutoMigrate
@@ -102,4 +107,5 @@ var allSchemas = []interface{}{
 	&TgUser{},
 	&Ban{},
 	&MinecraftAccount{},
+	&TgChat{},
 }

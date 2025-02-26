@@ -2,12 +2,23 @@ package tgtypes
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
+
+func UpdateChat(update *tgbotapi.Update) authdb.TgChatId {
+	chatId := update.Message.Chat.ID
+	return authdb.TgChatId(chatId)
+}
+
+func UpdateMessageId(update *tgbotapi.Update) int64 {
+	return int64(update.Message.MessageID)
+}
 
 const PrivateChatType string = "private"
 const GroupChatType string = "group"
@@ -202,6 +213,28 @@ func (api *AuxTgApi) DeleteMyCommands(scope *BotCommandScope, languageCode *stri
 	}
 	if !resp.Ok {
 		return errors.New("failed to delete commands")
+	}
+	return nil
+}
+
+func (api *AuxTgApi) SetReaction(chatId authdb.TgChatId, messageId int64, emoji string) error {
+	params := url.Values{}
+	params.Add("chat_id", fmt.Sprintf("%d", chatId))
+	params.Add("message_id", fmt.Sprintf("%d", messageId))
+	emojiJson, err := json.Marshal([]struct {
+		Type  string `json:"type"`
+		Emoji string `json:"emoji"`
+	}{{"emoji", emoji}})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal emoji")
+	}
+	params.Add("reaction", string(emojiJson))
+	resp, err := api.api.MakeRequest("setMessageReaction", params)
+	if err != nil {
+		return errors.Wrap(err, "failed to set reaction")
+	}
+	if !resp.Ok {
+		return errors.New(resp.Description)
 	}
 	return nil
 }

@@ -23,7 +23,7 @@ func NewPrivateChatHandler(bot *TgBot) *PrivateChatHandler {
 	return &PrivateChatHandler{bot: bot}
 }
 
-func (handler *PrivateChatHandler) IsLAstAdmin() bool {
+func (handler *PrivateChatHandler) IsLastAdmin() bool {
 	return handler.lastActor != nil && handler.lastActor.IsAdmin
 }
 
@@ -44,7 +44,7 @@ func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *
 	case "newpassword":
 		return &NewPasswordHandler{bot: handler.bot}, nil
 	default:
-		if handler.IsLAstAdmin() {
+		if handler.IsLastAdmin() {
 			switch command {
 			case "approve_user":
 				return &ApproveUserHandler{bot: handler.bot}, nil
@@ -65,7 +65,7 @@ func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 		{Command: "remove_minecraft_login", Description: "Удалить аккаунт с сервера"},
 		{Command: "newpassword", Description: "Сгенерировать новый пароль для аккаунта"},
 	}
-	if handler.IsLAstAdmin() {
+	if handler.IsLastAdmin() {
 		commands = append(commands, []tgtypes.BotCommand{
 			{Command: "approve_user", Description: "Одобрить пользователя"},
 			{Command: "disapprove_user", Description: "Отклонить пользователя"},

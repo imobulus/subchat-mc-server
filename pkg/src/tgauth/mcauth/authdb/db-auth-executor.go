@@ -390,3 +390,17 @@ func (authdb *AuthDbExecutor) SetPassword(login mojang.MinecraftLogin, password 
 	}
 	return nil
 }
+
+func (authdb *AuthDbExecutor) ApproveChat(chatId TgChatId, actorId ActorId) error {
+	authdb.logger.Debug("approving chat", zap.Uint("chat_id", uint(chatId)))
+	chat := TgChat{
+		ID:         chatId,
+		Approved:   true,
+		ApprovedBy: actorId,
+	}
+	err := authdb.db.Model(&chat).Updates(chat).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to approve chat %d", chatId)
+	}
+	return nil
+}
