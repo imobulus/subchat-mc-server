@@ -26,6 +26,9 @@ func (handler *PublicChatHandler) HandleUpdate(update *tgbotapi.Update, actor *a
 	switch update.Message.Command() {
 	case "approve":
 		return handler.handleApproveCommand(update, actor)
+	case "imhere":
+		handler.bot.aux.SetReaction(tgtypes.UpdateChat(update), tgtypes.UpdateMessageId(update), "👀")
+		return nil, nil
 	}
 	return nil, nil
 }

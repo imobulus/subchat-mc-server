@@ -168,6 +168,9 @@ func NewAuxTgApi(api *tgbotapi.BotAPI, logger *zap.Logger) *AuxTgApi {
 
 func (api *AuxTgApi) SetMyCommands(commands []BotCommand, scope *BotCommandScope, languageCode *string) error {
 	v := url.Values{}
+	if commands == nil {
+		commands = []BotCommand{}
+	}
 	commandsJSON, err := json.Marshal(commands)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal commands")
