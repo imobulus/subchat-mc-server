@@ -1,5 +1,4 @@
 ARG JDK_VERSION=21
-ARG WORKUID=0
 
 FROM alpine:latest AS mods
 WORKDIR /mcserver
@@ -21,6 +20,7 @@ ARG \
   MC_VERSION=1.21.4 \
   FABRIC_LOADER_VERSION=0.16.10 \
   FABRIC_INSTALLER_VERSION=1.0.1
+ARG WORKUID=0
 USER $WORKUID:$WORKUID
 WORKDIR /mcserver
 ADD --chown=$WORKUID:$WORKUID --link https://meta.fabricmc.net/v2/versions/loader/$MC_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar fabric.jar
