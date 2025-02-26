@@ -89,6 +89,13 @@ type MyMinecraftLoginsHandler struct {
 	bot *TgBot
 }
 
+func (bot *TgBot) needToVerifyDisclaimer() string {
+	return fmt.Sprintf(
+		"Мне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. Используйте /imhere@%s в сабчате",
+		bot.api.Self.UserName,
+	)
+}
+
 func (handler *MyMinecraftLoginsHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	msgBuilder := strings.Builder{}
 	if len(actor.MinecraftAccounts) == 0 {
@@ -104,7 +111,7 @@ func (handler *MyMinecraftLoginsHandler) InitialHandle(update *tgbotapi.Update, 
 	msgBuilder.WriteString(fmt.Sprintf("\nЛимит аккаунтов: %d/%d", len(actor.MinecraftAccounts), limit))
 	if !actor.Accepted {
 		msgBuilder.WriteString(
-			"\n\nМне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. Используйте /imhere@subchat_sentry_bot в сабчате",
+			"\n\n" + handler.bot.needToVerifyDisclaimer(),
 		)
 	}
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, msgBuilder.String())
@@ -155,7 +162,7 @@ func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update, 
 				replyBuilder.WriteString("Превышен лимит зарегистрированных аккаунтов, возврат в главное меню")
 			} else if errors.Is(err, permsengine.ErrorNotAccepted{}) {
 				permissionDenied = true
-				replyBuilder.WriteString("Мне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. Используйте /imhere@subchat_sentry_bot в сабчате")
+				replyBuilder.WriteString(handler.bot.needToVerifyDisclaimer())
 			} else {
 				return handler, err
 			}
@@ -280,7 +287,7 @@ func (handler *AddMinecraftLoginHandler) finishAdding(update *tgbotapi.Update, a
 		if errors.Is(err, permsengine.ErrorNotAccepted{}) {
 			msg := tgbotapi.NewMessage(
 				update.Message.Chat.ID,
-				"Мне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. Используйте /imhere@subchat_sentry_bot в сабчате",
+				handler.bot.needToVerifyDisclaimer(),
 			)
 			handler.bot.SendLog(msg)
 			return nil, nil
