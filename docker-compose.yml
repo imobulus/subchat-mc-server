@@ -5,6 +5,10 @@ configs:
     file: ${CONFIGS_PATH:-server-configs}/server-config.yaml
   mcstartup:
     file: ${CONFIGS_PATH:-server-configs}/startup-commands.txt
+  easyauth:
+    file: ${CONFIGS_PATH:-server-configs}/easyauth.json
+  tgbot:
+    file: ${CONFIGS_PATH:-server-configs}/tg-bot.yaml
   
 secrets:
   tgbot-secret:
@@ -25,6 +29,8 @@ services:
     build:
       context: .
       dockerfile: mc-server.Dockerfile
+      args:
+        - WORKUID=${WORKUID:-0}
     ports:
       - ${OVERSEER_IP}${OVERSEER_IP:+:}8080:8080
     stdin_open: true
@@ -35,6 +41,8 @@ services:
         target: /mcserver/server-config.yaml
       - source: mcstartup
         target: /mcserver/startup-commands.txt
+      - source: easyauth
+        target: /mcserver/mods/EasyAuth/config.json
     volumes:
       - type: bind
         source: ${STORAGE_PATH:-storage}/world
@@ -45,7 +53,6 @@ services:
       - type: bind
         source: ${STORAGE_PATH:-storage}/easyauth-leveldb
         target: /mcserver/mods/EasyAuth/levelDBStore
-    user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
   mc-proxy:
     networks:
       - subchat-internal
@@ -53,6 +60,8 @@ services:
     build:
       context: .
       dockerfile: mc-proxy.Dockerfile
+      args:
+        - WORKUID=${WORKUID:-0}
     ports:
       - ${SERVER_IP}${SERVER_IP:+:}25565:25565
     volumes:
@@ -60,7 +69,6 @@ services:
         source: ${CONFIGS_PATH:-server-configs}/mc-proxies
         target: /infrared/proxies
         read_only: true
-    user: ${SERVER_USER:-${USER}}:${SERVER_USER:-${USER}}
   tg-bot:
     networks:
       - subchat-internal
@@ -68,10 +76,14 @@ services:
     build:
       context: .
       dockerfile: tg-bot.Dockerfile
+      args:
+        - WORKUID=${WORKUID:-0}
+    configs:
+      - source: tgbot
+        target: /tgbot/config.yaml
     secrets:
       - tgbot-secret
     volumes:
       - type: bind
         source: ${STORAGE_PATH:-storage}/bot-db
         target: /sqlite
-    user: ${SERVER_USER}

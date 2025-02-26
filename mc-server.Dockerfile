@@ -1,4 +1,5 @@
 ARG JDK_VERSION=21
+ARG WORKUID=0
 
 FROM alpine:latest AS mods
 WORKDIR /mcserver
@@ -20,15 +21,15 @@ ARG \
   MC_VERSION=1.21.4 \
   FABRIC_LOADER_VERSION=0.16.10 \
   FABRIC_INSTALLER_VERSION=1.0.1
+USER $WORKUID:$WORKUID
 WORKDIR /mcserver
-ADD --link https://meta.fabricmc.net/v2/versions/loader/$MC_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar fabric.jar
+ADD --chown=$WORKUID:$WORKUID --link https://meta.fabricmc.net/v2/versions/loader/$MC_VERSION/$FABRIC_LOADER_VERSION/$FABRIC_INSTALLER_VERSION/server/jar fabric.jar
 # initial run to download the server
 RUN echo eula=true > eula.txt
 RUN java -Xmx2G -jar fabric.jar --nogui --initSettings
-COPY --from=mods /mcserver/ ./
-COPY --from=runscript /build/pkg/cmd/runserver/runserver runserver
-COPY --from=runscript /build/leveldb-cli leveldb-cli
-COPY server-configs/easyauth.json mods/EasyAuth/config.json
+COPY --chown=$WORKUID:$WORKUID --from=mods /mcserver/ ./
+COPY --chown=$WORKUID:$WORKUID --from=runscript /build/pkg/cmd/runserver/runserver runserver
+COPY --chown=$WORKUID:$WORKUID --from=runscript /build/leveldb-cli leveldb-cli
 VOLUME /mcserver/player-lists
 RUN CONFFILES="banned-ips.json banned-players.json ops.json usercache.json whitelist.json"; \
   for file in $CONFFILES; do \
