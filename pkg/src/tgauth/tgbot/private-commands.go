@@ -79,7 +79,7 @@ func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 }
 
 func (handler *PrivateChatHandler) GetHelpDescription() string {
-	return "Главное Меню"
+	return "Здесь вы можете получить доступ к серверу subchat.imobul.us"
 }
 func (handler *PrivateChatHandler) GetBot() *TgBot {
 	return handler.bot
