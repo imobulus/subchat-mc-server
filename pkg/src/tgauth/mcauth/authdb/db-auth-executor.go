@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -85,7 +86,8 @@ func (authdb *AuthDbExecutor) UpdateTgUserInfo(tguser tgbotapi.User) error {
 	user.ID = TgUserId(tguser.ID)
 	// user found
 	err = authdb.db.Model(&user).Updates(TgUser{
-		LastSeenInfo: tguser,
+		LastSeenInfo:      tguser,
+		LastLowerUsername: strings.ToLower(tguser.UserName),
 	}).Error
 	if err != nil {
 		return errors.Wrapf(err, "fail to update tg user %s", ShortDescribeTgUser(tguser))
@@ -300,6 +302,21 @@ func (authdb *AuthDbExecutor) GetActorByTgUser(tguser TgUserId, actor *Actor) er
 	err := authdb.db.First(tgAcc).Error
 	if err != nil {
 		return errors.Wrapf(err, "fail to get actor by tg user %d", tguser)
+	}
+	actor.ID = tgAcc.ActorID
+	err = authdb.GetActor(actor)
+	if err != nil {
+		return errors.Wrap(err, "failed to get actor")
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) GetActorByTgUserName(username string, actor *Actor) error {
+	authdb.logger.Debug("getting actor by tg user", zap.String("tg_username", username))
+	tgAcc := &TgUser{}
+	err := authdb.db.Where(TgUser{LastLowerUsername: strings.ToLower(username)}).First(tgAcc).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to get actor by tg user %s", username)
 	}
 	actor.ID = tgAcc.ActorID
 	err = authdb.GetActor(actor)

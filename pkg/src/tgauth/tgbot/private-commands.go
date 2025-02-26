@@ -3,6 +3,7 @@ package tgbot
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -12,6 +13,7 @@ import (
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 type PrivateChatHandler struct {
@@ -470,24 +472,108 @@ func (handler *NewPasswordHandler) GetBot() *TgBot {
 }
 
 type ApproveUserHandler struct {
-	bot *TgBot
+	bot          *TgBot
+	selectedUser *authdb.Actor
 }
 
 func (handler *ApproveUserHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
-	// not implemented
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Not implemented")
+	if handler.selectedUser == nil {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите id пользователя в виде числа или юзернейм начиная с @")
+		handler.bot.SendLog(msg)
+		return handler, nil
+	}
+	responseBuilder := strings.Builder{}
+	responseBuilder.WriteString("Пользователь:\n")
+	responseBuilder.WriteString(handler.selectedUser.Nickname + "\n")
+	responseBuilder.WriteString(handler.selectedUser.Description + "\n")
+	responseBuilder.WriteString("Одобрить? /confirm /abort")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseBuilder.String())
 	handler.bot.SendLog(msg)
-	return nil, nil
+	return handler, nil
 }
 
 func (handler *ApproveUserHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
-	return nil, nil
+	if handler.selectedUser == nil {
+		return handler.parseUser(update, actor)
+	}
+	return handler.processConfirmation(update, actor)
 }
+
+func (handler *ApproveUserHandler) parseUser(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	text := update.Message.Text
+	actorToApprove := &authdb.Actor{}
+	if strings.HasPrefix(text, "@") {
+		// username
+		err := handler.bot.permsEngine.GetActorByTgUserName(strings.TrimPrefix(text, "@"), actorToApprove)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Пользователь не найден")
+				handler.bot.SendLog(msg)
+				return handler, nil
+			} else {
+				return handler, err
+			}
+		}
+		handler.selectedUser = actorToApprove
+		return handler, nil
+	} else {
+		userId, err := strconv.ParseInt(text, 10, 64)
+		if err != nil {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Неверный формат id")
+			handler.bot.SendLog(msg)
+			return handler, nil
+		}
+		err = handler.bot.permsEngine.GetActorByTgUser(authdb.TgUserId(userId), actorToApprove)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Пользователь не найден")
+				handler.bot.SendLog(msg)
+				return handler, nil
+			} else {
+				return handler, err
+			}
+		}
+		handler.selectedUser = actorToApprove
+		return handler, nil
+	}
+}
+
+func (handler *ApproveUserHandler) processConfirmation(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	switch update.Message.Command() {
+	case "confirm":
+		err := handler.bot.permsEngine.AdminVerifyActor(actor.ID, handler.selectedUser.ID)
+		if err != nil {
+			return nil, err
+		}
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Пользователь одобрен")
+		handler.bot.SendLog(msg)
+		return nil, nil
+	case "abort":
+		handler.selectedUser = nil
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Отменено")
+		handler.bot.SendLog(msg)
+		return nil, nil
+	default:
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Отправьте /confirm или /abort")
+		handler.bot.SendLog(msg)
+		return handler, nil
+	}
+}
+
 func (handler *ApproveUserHandler) GetCommands() []tgtypes.BotCommand {
-	return nil
+	if handler.selectedUser == nil {
+		return nil
+	}
+	return []tgtypes.BotCommand{
+		{Command: "confirm", Description: "Одобрить"},
+		// abort command handler upstream
+	}
 }
 func (handler *ApproveUserHandler) GetHelpDescription() string {
-	return "Одобрить пользователя"
+	if handler.selectedUser == nil {
+		return "Введите пользователя для одобрения"
+	}
+	return "Одобрить пользователя " + handler.selectedUser.Nickname
 }
 func (handler *ApproveUserHandler) GetBot() *TgBot {
 	return handler.bot

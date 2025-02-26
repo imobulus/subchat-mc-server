@@ -76,6 +76,8 @@ type TgUser struct {
 	DeletedAt    gorm.DeletedAt `gorm:"index"`
 	LastSeenInfo tgbotapi.User  `gorm:"serializer:json"`
 	ActorID      ActorId
+
+	LastLowerUsername string
 }
 
 func ShortDescribeTgUser(u tgbotapi.User) string {

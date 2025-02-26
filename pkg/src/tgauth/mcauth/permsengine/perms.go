@@ -198,6 +198,11 @@ func (engine *ServerPermsEngine) GetActorByTgUser(tgUserId authdb.TgUserId, acto
 	return err
 }
 
+func (engine *ServerPermsEngine) GetActorByTgUserName(username string, actor *authdb.Actor) error {
+	err := engine.dbExecutor.GetActorByTgUserName(username, actor)
+	return err
+}
+
 func (engine *ServerPermsEngine) UpdateTgUserInfo(tguser tgbotapi.User) error {
 	err := engine.dbExecutor.UpdateTgUserInfo(tguser)
 	return err
