@@ -19,8 +19,11 @@ type PrivateChatHandler struct {
 	bot       *TgBot
 }
 
-func NewPrivateChatHandler(bot *TgBot) *PrivateChatHandler {
-	return &PrivateChatHandler{bot: bot}
+func NewPrivateChatHandler(bot *TgBot, initialActor *authdb.Actor) *PrivateChatHandler {
+	return &PrivateChatHandler{
+		lastActor: initialActor,
+		bot:       bot,
+	}
 }
 
 func (handler *PrivateChatHandler) IsLastAdmin() bool {

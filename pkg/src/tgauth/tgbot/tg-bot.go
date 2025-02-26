@@ -30,6 +30,7 @@ type InteractiveSessionId struct {
 type ChatHandler struct {
 	id             InteractiveSessionId
 	isPrivate      bool
+	lastActor      *authdb.Actor
 	handlerMx      *sync.Mutex
 	currentHandler InteractiveHandler
 	lastUpdateTime time.Time
@@ -120,7 +121,7 @@ func (bot *TgBot) Done() <-chan struct{} {
 
 func (bot *TgBot) initCommands() error {
 	bot.aux.DeleteMyCommands(nil, nil)
-	privateHandler := MakePrivateChatHandler(bot)
+	privateHandler := MakePrivateChatHandler(bot, nil)
 	privateCommands := privateHandler.GetCommands()
 	err := bot.aux.SetMyCommands(privateCommands, &tgtypes.BotCommandScope{
 		AllPrivateChats: tgtypes.NewBotCommandScopeAllPrivateChats(),
@@ -228,7 +229,7 @@ func (bot *TgBot) handleUpdate(update tgbotapi.Update) {
 	go func() {
 		defer bot.wg.Done()
 		bot.handleChatMessageUpdate(chatHandler, &update)
-		bot.handleNewInteractiveCommands(chatHandler)
+		bot.handleNewInteractiveCommands(chatHandler, &update)
 		chatHandler.handlerMx.Unlock()
 		bot.handleCleanup(chatHandler)
 	}()
@@ -271,12 +272,24 @@ func (bot *TgBot) HandleUpdateError(update *tgbotapi.Update, err error) {
 	}
 }
 
-func MakePrivateChatHandler(bot *TgBot) InteractiveHandler {
-	return NewCommonHandleWrapper(NewPrivateChatHandler(bot))
+func MakePrivateChatHandler(bot *TgBot, initialActor *authdb.Actor) InteractiveHandler {
+	return NewCommonHandleWrapper(NewPrivateChatHandler(bot, initialActor))
 }
 
 func MakePublicChatHandler(bot *TgBot) InteractiveHandler {
 	return NewPublicChatHandler(bot)
+}
+
+func (bot *TgBot) getFirstHandler(actor *authdb.Actor, update *tgbotapi.Update) InteractiveHandler {
+	switch update.Message.Chat.Type {
+	case tgtypes.PrivateChatType:
+		return MakePrivateChatHandler(bot, actor)
+	case tgtypes.GroupChatType, tgtypes.SupergroupChatType:
+		return MakePublicChatHandler(bot)
+	default:
+		bot.logger.Debug("chat type is not implemented", zap.String("chatType", update.Message.Chat.Type))
+		return nil
+	}
 }
 
 func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbotapi.Update) {
@@ -298,7 +311,12 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 		bot.HandleUpdateError(update, err)
 		return
 	}
-	bot.permsEngine.GetActorByTgUser(authdb.TgUserId(update.Message.From.ID), actor)
+	err = bot.permsEngine.GetActorByTgUser(authdb.TgUserId(update.Message.From.ID), actor)
+	if err != nil {
+		bot.HandleUpdateError(update, err)
+		return
+	}
+	chatHandler.lastActor = actor
 	if update.Message.Chat.Type == tgtypes.GroupChatType || update.Message.Chat.Type == tgtypes.SupergroupChatType {
 		err := bot.permsEngine.SeenInChat(actor.ID, authdb.TgChatId(update.Message.Chat.ID))
 		if err != nil {
@@ -313,13 +331,11 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 		}
 	}()
 	if chatHandler.currentHandler == nil {
-		switch update.Message.Chat.Type {
-		case tgtypes.PrivateChatType:
-			chatHandler.currentHandler = MakePrivateChatHandler(bot)
-		default:
-			bot.logger.Debug("chat type is not implemented", zap.String("chatType", update.Message.Chat.Type))
+		handler := bot.getFirstHandler(actor, update)
+		if handler == nil {
 			return
 		}
+		chatHandler.currentHandler = handler
 	}
 	newHandler, err := chatHandler.currentHandler.HandleUpdate(update, actor)
 	if err != nil {
@@ -341,11 +357,19 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 	}
 }
 
-func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler) {
+func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler, update *tgbotapi.Update) {
 	if chatHandler.currentHandler == nil {
-		err := bot.aux.SetMyCommands(NewPrivateChatHandler(bot).GetCommands(), chatHandler.GetScope(), nil)
+		handler := bot.getFirstHandler(chatHandler.lastActor, update)
+		if handler == nil {
+			err := bot.aux.DeleteMyCommands(chatHandler.GetScope(), nil)
+			if err != nil {
+				bot.logger.Error("Failed to delete commands", zap.Error(err))
+			}
+			return
+		}
+		err := bot.aux.SetMyCommands(handler.GetCommands(), chatHandler.GetScope(), nil)
 		if err != nil {
-			bot.logger.Error("Failed to delete commands", zap.Error(err))
+			bot.logger.Error("Failed to set commands", zap.Error(err))
 		}
 		return
 	}
