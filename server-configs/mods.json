@@ -1,0 +1,13 @@
+[{
+    "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/3WOjLgFJ/fabric-api-0.116.1%2B1.21.4.jar",
+    "file": "fabric-api.jar",
+    "add_to_client": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/aZj58GfX/versions/cNfqAFbs/easyauth-mc1.21.2-3.0.27.jar",
+    "file": "easyauth.jar"
+},
+{
+    "url": "https://cdn.modrinth.com/data/Vebnzrzj/versions/6h9SnsZu/LuckPerms-Fabric-5.4.150.jar",
+    "file": "luckperms.jar"
+}]

@@ -494,12 +494,12 @@ func (handler *ApproveUserHandler) InitialHandle(update *tgbotapi.Update, actor 
 
 func (handler *ApproveUserHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
 	if handler.selectedUser == nil {
-		return handler.parseUser(update, actor)
+		return handler.parseUser(update)
 	}
 	return handler.processConfirmation(update, actor)
 }
 
-func (handler *ApproveUserHandler) parseUser(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+func (handler *ApproveUserHandler) parseUser(update *tgbotapi.Update) (InteractiveHandler, error) {
 	text := update.Message.Text
 	actorToApprove := &authdb.Actor{}
 	if strings.HasPrefix(text, "@") {

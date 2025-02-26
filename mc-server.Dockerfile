@@ -1,12 +1,19 @@
 ARG JDK_VERSION=21
 
+FROM golang:1.23.4 AS modsscript
+WORKDIR /build
+COPY pkg/ pkg/
+WORKDIR /build/pkg/cmd/modssetup
+RUN --mount=type=cache,target=/go/pkg go build -o /modssetup .
+
 FROM alpine:latest AS mods
+COPY --from=modsscript /lib/x86_64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/libc.so.6
+COPY --from=modsscript /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
 WORKDIR /mcserver
+COPY --from=modsscript /modssetup modssetup
 RUN mkdir mods clientmods
-ADD --link https://cdn.modrinth.com/data/P7dR8mSH/versions/3WOjLgFJ/fabric-api-0.116.1%2B1.21.4.jar mods/fabric-api.jar
-RUN cp mods/fabric-api.jar clientmods
-ADD --link https://cdn.modrinth.com/data/aZj58GfX/versions/cNfqAFbs/easyauth-mc1.21.2-3.0.27.jar mods/easyauth.jar
-ADD --link https://cdn.modrinth.com/data/Vebnzrzj/versions/6h9SnsZu/LuckPerms-Fabric-5.4.150.jar mods/luckperms.jar
+COPY server-configs/mods.json .
+RUN --mount=type=cache,target=cache ./modssetup
 
 FROM golang:1.23.4 AS runscript
 WORKDIR /build
