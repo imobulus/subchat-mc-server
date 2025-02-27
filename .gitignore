@@ -1,5 +1,5 @@
 secrets/*
-!secrets/tgbot-token-example.json
+!secrets/tgbot-example.json
 storage/*/*
 !storage/*/.INIT.txt
 .env
