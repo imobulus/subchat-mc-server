@@ -17,6 +17,17 @@ type ModDescription struct {
 	Url         string `json:"url"`
 	File        string `json:"file"`
 	AddToClient bool   `json:"add_to_client"`
+	NoServer    bool   `json:"no_server"`
+}
+
+func runCmd(cmdArgs ...string) {
+	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		panic(err)
+	}
 }
 
 func hashFile(filePath string) ([]byte, error) {
@@ -101,6 +112,7 @@ func main() {
 	clientModsPath := flag.String("client-dir", "clientmods", "Path to client directory")
 	cachePath := flag.String("cache-dir", "cache", "Path to cache directory")
 	flag.Parse()
+	clientModsModsPath := path.Join(*clientModsPath, "mods")
 	modsContents, err := os.ReadFile(*modsJson)
 	if err != nil {
 		panic(err)
@@ -138,25 +150,15 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		modPath := path.Join(*modsPath, mod.File)
-		fmt.Println("Copying mod to: " + modPath)
-		cmd := exec.Command("cp", modHashedFilePath, modPath)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err = cmd.Run()
-		if err != nil {
-			panic(err)
+		if !mod.NoServer {
+			modPath := path.Join(*modsPath, mod.File)
+			fmt.Println("Copying mod to: " + modPath)
+			runCmd("cp", modHashedFilePath, modPath)
 		}
 		if mod.AddToClient {
-			clientModPath := path.Join(*clientModsPath, mod.File)
+			clientModPath := path.Join(clientModsModsPath, mod.File)
 			fmt.Println("Copying mod to: " + clientModPath)
-			cmd := exec.Command("cp", modHashedFilePath, clientModPath)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err = cmd.Run()
-			if err != nil {
-				panic(err)
-			}
+			runCmd("cp", modHashedFilePath, clientModPath)
 		}
 	}
 	urlToHashJson, err := json.Marshal(urlToHashMap)
@@ -167,4 +169,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	// zip all client mods
+	runCmd("zip", "-r", path.Join(*clientModsPath, "mods.zip"), clientModsModsPath)
 }

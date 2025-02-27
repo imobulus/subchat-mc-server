@@ -261,6 +261,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		s.cancel()
 		w.WriteHeader(http.StatusOK)
 	default:
+		if strings.HasPrefix(r.RequestURI, "/mods/") || r.RequestURI == "/mods" {
+			http.StripPrefix("/mods", http.FileServer(http.Dir("clientmods"))).ServeHTTP(w, r)
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 	}
 }

@@ -10,4 +10,57 @@
 {
     "url": "https://cdn.modrinth.com/data/Vebnzrzj/versions/6h9SnsZu/LuckPerms-Fabric-5.4.150.jar",
     "file": "luckperms.jar"
-}]
+},
+{
+    "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/cHQjeYVS/appleskin-fabric-mc1.21.3-3.0.6.jar",
+    "file": "appleskin.jar",
+    "add_to_client": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/NcUtCpym/versions/fh7IHLqi/XaerosWorldMap_1.39.4_Fabric_1.21.4.jar",
+    "file": "xaerosworldmap.jar",
+    "add_to_client": true,
+    "no_server": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/1bokaNcj/versions/8JzrUlHh/Xaeros_Minimap_25.1.0_Fabric_1.21.4.jar",
+    "file": "xaerosminimap.jar",
+    "add_to_client": true,
+    "no_server": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/yBW8D80W/versions/YgZzYuBw/lambdynamiclights-4.0.1%2B1.21.4.jar",
+    "file": "lambdynamiclights.jar",
+    "add_to_client": true,
+    "no_server": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/9eGKb6K1/versions/pl9FpaYJ/voicechat-fabric-1.21.4-2.5.26.jar",
+    "file": "voicechat.jar",
+    "add_to_client": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/Wb5oqrBJ/versions/LZPfxcMx/chat_heads-0.13.13-fabric-1.21.4.jar",
+    "file": "chatheads.jar",
+    "add_to_client": true,
+    "no_server": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/aC3cM3Vq/versions/m8rwZENW/MouseTweaks-fabric-mc1.21.3-2.27.jar",
+    "file": "mousetweaks.jar",
+    "add_to_client": true,
+    "no_server": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/fM515JnW/versions/qqQs6YzG/AmbientSounds_FABRIC_v6.1.3_mc1.21.4.jar",
+    "file": "ambientsounds.jar",
+    "add_to_client": true,
+    "no_server": true
+},
+{
+    "url": "https://cdn.modrinth.com/data/MS1ZMyR7/versions/HwP123tD/BetterPingDisplay-Fabric-1.21.4-1.1.1.jar",
+    "file": "betterpingdisplay.jar",
+    "add_to_client": true,
+    "no_server": true
+}
+]

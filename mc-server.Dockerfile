@@ -7,11 +7,12 @@ WORKDIR /build/pkg/cmd/modssetup
 RUN --mount=type=cache,target=/go/pkg go build -o /modssetup .
 
 FROM alpine:latest AS mods
+RUN apk --no-cache add zip
 COPY --from=modsscript /lib/x86_64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/libc.so.6
 COPY --from=modsscript /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
 WORKDIR /mcserver
 COPY --from=modsscript /modssetup modssetup
-RUN mkdir mods clientmods
+RUN mkdir -p mods clientmods/mods
 COPY server-configs/mods.json .
 RUN --mount=type=cache,target=cache ./modssetup
 
