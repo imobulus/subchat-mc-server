@@ -12,6 +12,10 @@
     "file": "luckperms.jar"
 },
 {
+    "url": "https://cdn.modrinth.com/data/ZHKrK8Rp/versions/1KuX59cj/fastback-0.23.0%2B1.21.4-fabric.jar",
+    "file": "fastbackups.jar"
+},
+{
     "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/cHQjeYVS/appleskin-fabric-mc1.21.3-3.0.6.jar",
     "file": "appleskin.jar",
     "add_to_client": true
