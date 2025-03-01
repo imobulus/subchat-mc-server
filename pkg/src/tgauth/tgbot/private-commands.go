@@ -56,7 +56,7 @@ func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *
 			case "ban_user":
 				return &UserActionHandler{h: NewCommonAdminHandler(handler.bot), actionType: UserActionTypeBan}, nil
 			case "list_users":
-				return &ListUsersHandler{bot: handler.bot}, nil
+				return &ListUsersHandler{h: NewCommonAdminHandler(handler.bot)}, nil
 			}
 		}
 		return nil, ErrUnknownCommand{Update: update, Command: command}

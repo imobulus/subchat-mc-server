@@ -215,35 +215,113 @@ func (handler *UserActionHandler) GetCommands() []tgtypes.BotCommand {
 }
 func (handler *UserActionHandler) GetHelpDescription() string {
 	if handler.selectedUser == nil {
-		return "Введите пользователя для одобрения"
+		return "Введите пользователя"
 	}
-	return "Одобрить пользователя " + handler.selectedUser.Nickname
+	return "Подтвердите пользователя " + handler.selectedUser.Description
 }
 func (handler *UserActionHandler) GetBot() *TgBot {
 	return handler.h.bot
 }
 
 type ListUsersHandler struct {
-	bot *TgBot
+	h             *CommonAdminHandler
+	selectedUsers []authdb.Actor
+	pageNumber    int
 }
 
+const actorsPageSize = 10
+
 func (handler *ListUsersHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
-	// not implemented
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Not implemented")
-	handler.bot.SendLog(msg)
-	return nil, nil
+	if handler.selectedUsers == nil {
+		responseBuilder := strings.Builder{}
+		responseBuilder.WriteString("Выберите фильтр:\n")
+		responseBuilder.WriteString("/all - все пользователи\n")
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseBuilder.String())
+		_, err := handler.h.bot.api.Send(msg)
+		return handler, err
+	}
+	finalPage, err := handler.sendUsersList(update)
+	if err != nil {
+		return handler, err
+	}
+	if finalPage {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Конец списка")
+		_, err := handler.h.bot.api.Send(msg)
+		return nil, err
+	}
+	return handler, err
 }
 
 func (handler *ListUsersHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
-	return nil, nil
+	if handler.selectedUsers == nil {
+		return handler.processFilter(update, actor)
+	}
+	switch update.Message.Command() {
+	case "next":
+		handler.pageNumber++
+		return handler, nil
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Неверная команда")
+	_, err := handler.h.bot.api.Send(msg)
+	return handler, err
+}
+
+func (handler *ListUsersHandler) processFilter(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	switch update.Message.Command() {
+	case "all":
+		err := handler.selectAllUsers(actor)
+		return handler, err
+	default:
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Неверный фильтр")
+		_, err := handler.h.bot.api.Send(msg)
+		return handler, err
+	}
+}
+
+func (handler *ListUsersHandler) selectAllUsers(actor *authdb.Actor) error {
+	users, err := handler.h.bot.permsEngine.AdminListAllUsers(actor.ID)
+	if err != nil {
+		return err
+	}
+	handler.selectedUsers = users
+	return nil
+}
+
+func (handler *ListUsersHandler) sendUsersList(update *tgbotapi.Update) (bool, error) {
+	responseBuilder := strings.Builder{}
+	responseBuilder.WriteString(fmt.Sprintf(
+		"Пользователи %d-%d:\n",
+		handler.pageNumber*actorsPageSize,
+		(handler.pageNumber+1)*actorsPageSize-1),
+	)
+	isFinalPage := true
+	for i, user := range handler.selectedUsers[handler.pageNumber*actorsPageSize:] {
+		if i >= actorsPageSize {
+			isFinalPage = false
+			break
+		}
+		responseBuilder.WriteString(getUserDescriptionForAdmin(&user))
+		responseBuilder.WriteString("\n")
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseBuilder.String())
+	_, err := handler.h.bot.api.Send(msg)
+	return isFinalPage, err
 }
 
 func (handler *ListUsersHandler) GetCommands() []tgtypes.BotCommand {
-	return nil
+	if handler.selectedUsers == nil {
+		return []tgtypes.BotCommand{
+			{Command: "all", Description: "Все пользователи"},
+		}
+	}
+	commands := []tgtypes.BotCommand{
+		{Command: "next", Description: "Следующая страница"},
+	}
+	return commands
 }
 func (handler *ListUsersHandler) GetHelpDescription() string {
 	return "Список пользователей"
 }
 func (handler *ListUsersHandler) GetBot() *TgBot {
-	return handler.bot
+	return handler.h.bot
 }

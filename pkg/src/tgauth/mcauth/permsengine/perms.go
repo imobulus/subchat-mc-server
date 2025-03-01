@@ -134,6 +134,20 @@ func (engine *ServerPermsEngine) AdminBanActor(
 	return nil
 }
 
+func (engine *ServerPermsEngine) AdminListAllUsers(
+	requestor authdb.ActorId,
+) ([]authdb.Actor, error) {
+	err := engine.CheckAdminPermission(requestor)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check permission")
+	}
+	actors, err := engine.dbExecutor.GetAllActors()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get all actors")
+	}
+	return actors, nil
+}
+
 func (engine *ServerPermsEngine) SeenInChat(
 	actorId authdb.ActorId,
 	chatId authdb.TgChatId,

@@ -130,12 +130,7 @@ func (authdb *AuthDbExecutor) UnbanActor(actorId uint) {
 	authdb.db.Where("actor_id = ?", actorId).Delete(&Ban{})
 }
 
-// populates association fields which are non-nil
-func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
-	authdb.logger.Debug("getting actor", zap.Uint("actor_id", uint(actor.ID)))
-	if actor.ID == 0 {
-		return errors.New("actor id is not set")
-	}
+func preloadActorFields(db *gorm.DB) *gorm.DB {
 	preloadFields := []string{
 		"SeenInChats",
 		"VerifiedByAdmins",
@@ -143,25 +138,20 @@ func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
 		"TgAccounts",
 		"MinecraftAccounts",
 	}
-	// if actor.SeenInChats != nil {
-	// 	preloadFields = append(preloadFields, "SeenInChats")
-	// }
-	// if actor.VerifiedByAdmins != nil {
-	// 	preloadFields = append(preloadFields, "VerifiedByAdmins")
-	// }
-	// if actor.Bans != nil {
-	// 	preloadFields = append(preloadFields, "Bans")
-	// }
-	// if actor.TgAccounts != nil {
-	// 	preloadFields = append(preloadFields, "TgAccounts")
-	// }
-	// if actor.MinecraftAccounts != nil {
-	// 	preloadFields = append(preloadFields, "MinecraftAccounts")
-	// }
-	modelDb := authdb.db.Model(actor)
 	for _, field := range preloadFields {
-		modelDb = modelDb.Preload(field)
+		db = db.Preload(field)
 	}
+	return db
+}
+
+// populates association fields which are non-nil
+func (authdb *AuthDbExecutor) GetActor(actor *Actor) error {
+	authdb.logger.Debug("getting actor", zap.Uint("actor_id", uint(actor.ID)))
+	if actor.ID == 0 {
+		return errors.New("actor id is not set")
+	}
+	modelDb := authdb.db.Model(actor)
+	modelDb = preloadActorFields(modelDb)
 	err := modelDb.First(actor).Error
 	if err != nil {
 		return errors.Wrapf(err, "fail to get actor %d", actor.ID)
@@ -354,6 +344,16 @@ func (authdb *AuthDbExecutor) SetAdmin(actorId ActorId, isAdmin bool) error {
 		return errors.Wrapf(err, "fail to set actor admin %d", actorId)
 	}
 	return nil
+}
+
+func (authdb *AuthDbExecutor) GetAllActors() ([]Actor, error) {
+	authdb.logger.Debug("getting all actors")
+	var actors []Actor
+	err := preloadActorFields(authdb.db).Find(&actors).Error
+	if err != nil {
+		return nil, errors.Wrap(err, "fail to get all actors")
+	}
+	return actors, nil
 }
 
 // func (authdb *AuthDbExecutor) GetActorIdsUpdatedSince(time time.Time) ([]ActorId, error) {
