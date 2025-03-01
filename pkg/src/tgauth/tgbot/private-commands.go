@@ -93,7 +93,8 @@ type MyMinecraftLoginsHandler struct {
 
 func (bot *TgBot) needToVerifyDisclaimer() string {
 	return fmt.Sprintf(
-		"Мне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. Используйте /imhere@%s в сабчате",
+		"Мне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. "+
+			"Используйте /imhere@%s в сабчате или в чате тг-канала сервера",
 		bot.api.Self.UserName,
 	)
 }
