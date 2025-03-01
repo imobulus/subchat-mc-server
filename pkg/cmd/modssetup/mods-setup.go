@@ -169,6 +169,4 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// zip all client mods
-	runCmd("zip", "-r", path.Join(*clientModsPath, "mods.zip"), clientModsModsPath)
 }

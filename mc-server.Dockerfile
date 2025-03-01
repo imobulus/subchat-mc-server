@@ -7,7 +7,6 @@ WORKDIR /build/pkg/cmd/modssetup
 RUN --mount=type=cache,target=/go/pkg go build -o /modssetup .
 
 FROM alpine:latest AS mods
-RUN apk --no-cache add zip
 COPY --from=modsscript /lib/x86_64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/libc.so.6
 COPY --from=modsscript /lib64/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2
 WORKDIR /mcserver
@@ -24,6 +23,7 @@ WORKDIR /build/pkg/cmd/runserver
 RUN --mount=type=cache,target=/go/pkg go build -o runserver .
 
 FROM openjdk:$JDK_VERSION-jdk-slim AS build-mc-server
+RUN apt update && apt install -y zip
 ARG \
   MC_VERSION=1.21.4 \
   FABRIC_LOADER_VERSION=0.16.10 \
@@ -36,6 +36,7 @@ ADD --chown=$WORKUID:$WORKUID --link https://meta.fabricmc.net/v2/versions/loade
 RUN echo eula=true > eula.txt
 RUN java -Xmx2G -jar fabric.jar --nogui --initSettings
 COPY --chown=$WORKUID:$WORKUID --from=mods /mcserver/ ./
+RUN cp fabric.jar clientmods/mods && chmod -R +r clientmods/mods && zip -r clientmods/mods.zip clientmods/mods
 COPY --chown=$WORKUID:$WORKUID --from=runscript /build/pkg/cmd/runserver/runserver runserver
 COPY --chown=$WORKUID:$WORKUID --from=runscript /build/leveldb-cli leveldb-cli
 VOLUME /mcserver/player-lists
