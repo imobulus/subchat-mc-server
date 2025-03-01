@@ -369,11 +369,18 @@ func (authdb *AuthDbExecutor) GetAllActors() ([]Actor, error) {
 func (authdb *AuthDbExecutor) GetAcceptedActorsWithAccounts() ([]Actor, error) {
 	// authdb.logger.Debug("getting accepted actors with accounts")
 	var actors []Actor
-	err := authdb.db.Where(&Actor{Accepted: true}).Preload("MinecraftAccounts").Find(&actors).Error
+	err := authdb.db.Where(&Actor{Accepted: true}).Preload("MinecraftAccounts").Preload("Bans").Find(&actors).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "fail to get accepted actors")
 	}
-	return actors, nil
+	notBannedActors := make([]Actor, 0, len(actors))
+	for _, actor := range actors {
+		if len(actor.Bans) > 0 {
+			continue
+		}
+		notBannedActors = append(notBannedActors, actor)
+	}
+	return notBannedActors, nil
 }
 
 func (authdb *AuthDbExecutor) SetWhitelist(logins []mcserver.MinecraftAccountSpec) error {

@@ -186,7 +186,42 @@ func (e ErrorNotAccepted) Is(target error) bool {
 	return ok
 }
 
-func (engine *ServerPermsEngine) GetMinecraftLoginLimitByActor(actor *authdb.Actor) int {
+type ErrorActorBanned struct {
+	ActorId authdb.ActorId
+}
+
+func (e ErrorActorBanned) Error() string {
+	return fmt.Sprintf("actor %d is banned", e.ActorId)
+}
+
+func (e ErrorActorBanned) Is(target error) bool {
+	_, ok := target.(ErrorActorBanned)
+	return ok
+}
+
+func checkAccepted(actor *authdb.Actor) error {
+	if !actor.Accepted {
+		return ErrorNotAccepted{actor.ID}
+	}
+	if len(actor.Bans) > 0 {
+		return ErrorActorBanned{actor.ID}
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) GetMinecraftLoginLimitByActor(actorId authdb.ActorId) int {
+	actor := authdb.Actor{ID: actorId}
+	err := engine.dbExecutor.GetActor(&actor)
+	if err != nil {
+		return engine.config.DefaultMinecraftLoginsLimit
+	}
+	return engine.getMinecraftLoginLimitByActor(&actor)
+}
+
+func (engine *ServerPermsEngine) getMinecraftLoginLimitByActor(actor *authdb.Actor) int {
+	if actor.IsAdmin {
+		return -1
+	}
 	limit := engine.config.DefaultMinecraftLoginsLimit
 	if actor.CustomMinecraftLoginLimit != nil {
 		limit = *actor.CustomMinecraftLoginLimit
@@ -202,10 +237,11 @@ func (engine *ServerPermsEngine) CheckAddMinecraftLoginPermission(
 	if err != nil {
 		return err
 	}
-	if !actor.Accepted {
-		return ErrorNotAccepted{actorId}
+	err = checkAccepted(&actor)
+	if err != nil {
+		return err
 	}
-	limit := engine.GetMinecraftLoginLimitByActor(&actor)
+	limit := engine.getMinecraftLoginLimitByActor(&actor)
 	if limit >= 0 && len(actor.MinecraftAccounts) >= limit {
 		return ErrorExceededMaxMinecraftLogins{
 			CurrentNumber: len(actor.MinecraftAccounts),

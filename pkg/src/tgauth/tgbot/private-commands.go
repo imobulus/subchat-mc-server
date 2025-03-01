@@ -108,7 +108,7 @@ func (handler *MyMinecraftLoginsHandler) InitialHandle(update *tgbotapi.Update, 
 			msgBuilder.WriteString(fmt.Sprintf("<code>%s</code>\n", acc.ID))
 		}
 	}
-	limit := handler.bot.permsEngine.GetMinecraftLoginLimitByActor(actor)
+	limit := handler.bot.permsEngine.GetMinecraftLoginLimitByActor(actor.ID)
 	msgBuilder.WriteString(fmt.Sprintf("\nЛимит аккаунтов: %d/%d", len(actor.MinecraftAccounts), limit))
 	if !actor.Accepted {
 		msgBuilder.WriteString(
