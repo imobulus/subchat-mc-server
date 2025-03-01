@@ -81,7 +81,7 @@ func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 }
 
 func (handler *PrivateChatHandler) GetHelpDescription() string {
-	return "Здесь вы можете получить доступ к серверу subchat.imobul.us"
+	return "Здесь вы можете получить доступ к серверу <a href=\"https://subchat.imobul.us/\">subchat.imobul.us</a>"
 }
 func (handler *PrivateChatHandler) GetBot() *TgBot {
 	return handler.bot
@@ -105,8 +105,7 @@ func (handler *MyMinecraftLoginsHandler) InitialHandle(update *tgbotapi.Update, 
 	} else {
 		msgBuilder.WriteString("Ваши аккаунты:\n")
 		for _, acc := range actor.MinecraftAccounts {
-			msgBuilder.WriteString(string(acc.ID))
-			msgBuilder.WriteRune('\n')
+			msgBuilder.WriteString(fmt.Sprintf("<code>%s</code>\n", acc.ID))
 		}
 	}
 	limit := handler.bot.permsEngine.GetMinecraftLoginLimitByActor(actor)
@@ -182,7 +181,7 @@ func (handler *AddMinecraftLoginHandler) InitialHandle(update *tgbotapi.Update, 
 }
 
 func (handler *AddMinecraftLoginHandler) handleLoginExists(update *tgbotapi.Update, login mojang.MinecraftLogin) {
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Аккаунт %s уже занят, введите другой", login))
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Аккаунт <code>%s</code> уже занят, введите другой", login))
 	handler.bot.SendLog(msg)
 }
 
@@ -227,7 +226,7 @@ func (handler *AddMinecraftLoginHandler) processLogin(update *tgbotapi.Update, a
 			handler.bot.logger.Error("Failed to query online uuid", zap.Error(err))
 			handler.bot.SendLog(tgbotapi.NewMessage(
 				update.Message.Chat.ID,
-				fmt.Sprintf("Не получилось проверить есть ли официальный аккаунт с именем %s. ", login)+
+				fmt.Sprintf("Не получилось проверить есть ли официальный аккаунт с именем <code>%s</code>. ", login)+
 					"Отправьте /official если у вас есть лиценизия или /cracked если нет."+disclaimer,
 			))
 		}
@@ -235,7 +234,7 @@ func (handler *AddMinecraftLoginHandler) processLogin(update *tgbotapi.Update, a
 		handler.onlineId = playerId
 		handler.bot.SendLog(tgbotapi.NewMessage(
 			update.Message.Chat.ID,
-			fmt.Sprintf("Найден официальный аккаунт с именем %s. ", login)+
+			fmt.Sprintf("Найден официальный аккаунт с именем <code>%s</code>. ", login)+
 				"Отправьте /official если вы владелец или /cracked если просто хотите этот ник."+disclaimer,
 		))
 	}
@@ -265,7 +264,7 @@ func (handler *AddMinecraftLoginHandler) finishAdding(update *tgbotapi.Update, a
 	if handler.isOnline {
 		if handler.onlineId == uuid.Nil {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
-				"Не получилось найти ID игрока %s из-за неизвестной ошибки. Обратитесь к администратору.",
+				"Не получилось найти ID игрока <code>%s</code> из-за неизвестной ошибки. Обратитесь к администратору.",
 				handler.enteredLogin,
 			))
 			handler.bot.SendLog(msg)
@@ -305,9 +304,11 @@ func (handler *AddMinecraftLoginHandler) finishAdding(update *tgbotapi.Update, a
 			return nil, err
 		}
 		msg = tgbotapi.NewMessage(update.Message.Chat.ID, fmt.Sprintf(
-			"Пароль для аккаунта %s: %s\nС маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /newpassword",
+			"Пароль для аккаунта <code>%s</code>: <code>%s</code>\n"+
+				"С маленькой вероятностью он мог не установиться на сервере. В этом случае используйте /newpassword",
 			handler.enteredLogin, newPassword,
 		))
+		msg.ParseMode = tgbotapi.ModeHTML
 		handler.bot.SendLog(msg)
 	}
 	return nil, nil
@@ -336,7 +337,7 @@ type RevokeMinecraftLoginHandler struct {
 func buildMinecraftAccountsListForTg(list []authdb.MinecraftAccount) string {
 	b := strings.Builder{}
 	for _, acc := range list {
-		b.WriteString(string(acc.ID))
+		b.WriteString(fmt.Sprintf("<code>%s</code>", acc.ID))
 		if acc.IsOnline {
 			b.WriteString(" (официальный)")
 		}

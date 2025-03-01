@@ -31,25 +31,27 @@ func (handler *CommonAdminHandler) promptForConfirmation(update *tgbotapi.Update
 	responseBuilder.WriteString(getUserDescriptionForAdmin(actor))
 	responseBuilder.WriteString("\nОдобрить? /confirm /abort")
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseBuilder.String())
+	msg.ParseMode = tgbotapi.ModeHTML
 	_, err := handler.bot.api.Send(msg)
 	return err
 }
 
+// get user description with HTML parse mode
 func getUserDescriptionForAdmin(actor *authdb.Actor) string {
 	descBuilder := strings.Builder{}
-	descBuilder.WriteString(fmt.Sprintf("Пользователь %d:\n", actor.ID))
+	descBuilder.WriteString(fmt.Sprintf("Пользователь <code>%d</code>:\n", actor.ID))
 	for _, tgAcc := range actor.TgAccounts {
 		additions := []string{}
 		if tgAcc.LastSeenInfo.UserName != "" {
 			additions = append(additions, "@"+tgAcc.LastSeenInfo.UserName)
 		}
 		if tgAcc.LastSeenInfo.FirstName != "" {
-			additions = append(additions, tgAcc.LastSeenInfo.FirstName)
+			additions = append(additions, tgbotapi.EscapeText(tgbotapi.ModeHTML, tgAcc.LastSeenInfo.FirstName))
 		}
 		if tgAcc.LastSeenInfo.LastName != "" {
-			additions = append(additions, tgAcc.LastSeenInfo.LastName)
+			additions = append(additions, tgbotapi.EscapeText(tgbotapi.ModeHTML, tgAcc.LastSeenInfo.LastName))
 		}
-		descBuilder.WriteString(fmt.Sprintf("Tg `%d`", tgAcc.ID))
+		descBuilder.WriteString(fmt.Sprintf(`Тг <a href="tg://user?id=%d">%d</a>`, tgAcc.ID, tgAcc.ID))
 		if len(additions) > 0 {
 			descBuilder.WriteString(" ")
 			descBuilder.WriteString(strings.Join(additions, " "))
@@ -249,8 +251,11 @@ func (handler *ListUsersHandler) InitialHandle(update *tgbotapi.Update, actor *a
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Конец списка")
 		_, err := handler.h.bot.api.Send(msg)
 		return nil, err
+	} else {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Отправьте /next или /abort")
+		_, err := handler.h.bot.api.Send(msg)
+		return handler, err
 	}
-	return handler, err
 }
 
 func (handler *ListUsersHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
@@ -291,7 +296,7 @@ func (handler *ListUsersHandler) selectAllUsers(actor *authdb.Actor) error {
 func (handler *ListUsersHandler) sendUsersList(update *tgbotapi.Update) (bool, error) {
 	responseBuilder := strings.Builder{}
 	responseBuilder.WriteString(fmt.Sprintf(
-		"Пользователи %d-%d:\n",
+		"Пользователи <code>%d-%d</code>:\n",
 		handler.pageNumber*actorsPageSize,
 		(handler.pageNumber+1)*actorsPageSize-1),
 	)
@@ -305,6 +310,7 @@ func (handler *ListUsersHandler) sendUsersList(update *tgbotapi.Update) (bool, e
 		responseBuilder.WriteString("\n\n")
 	}
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseBuilder.String())
+	msg.ParseMode = tgbotapi.ModeHTML
 	_, err := handler.h.bot.api.Send(msg)
 	return isFinalPage, err
 }

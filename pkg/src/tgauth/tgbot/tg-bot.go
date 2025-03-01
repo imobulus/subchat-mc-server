@@ -378,6 +378,7 @@ func (bot *TgBot) handleNewInteractiveCommands(chatHandler *ChatHandler, update 
 }
 
 func (bot *TgBot) SendLog(conf tgbotapi.MessageConfig) {
+	conf.ParseMode = tgbotapi.ModeHTML
 	_, err := bot.api.Send(conf)
 	if err != nil {
 		bot.logger.Error("Failed to send message", zap.Error(err))
