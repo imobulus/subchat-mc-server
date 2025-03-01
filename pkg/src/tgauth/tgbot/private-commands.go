@@ -296,7 +296,7 @@ func (handler *AddMinecraftLoginHandler) finishAdding(update *tgbotapi.Update, a
 		}
 		return nil, err
 	}
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт добавлен")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Аккаунт добавлен, теперь с ним можно зайти на сервер")
 	handler.bot.SendLog(msg)
 	if !handler.isOnline {
 		newPassword := handler.bot.permsEngine.GeneratePassword()
