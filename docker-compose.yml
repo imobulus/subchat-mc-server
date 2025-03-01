@@ -9,7 +9,7 @@ configs:
     file: ${CONFIGS_PATH:-server-configs}/easyauth.json
   tgbot:
     file: ${CONFIGS_PATH:-server-configs}/tg-bot.yaml
-  
+
 secrets:
   tgbot-secret:
     file: ${SECRETS_PATH:-secrets}/tgbot.json
@@ -23,6 +23,7 @@ networks:
 
 services:
   mc-server:
+    restart: on-failure
     networks:
       - subchat-ip6net
       - subchat-internal
@@ -54,6 +55,7 @@ services:
         source: ${STORAGE_PATH:-storage}/easyauth-leveldb
         target: /mcserver/mods/EasyAuth/levelDBStore
   mc-proxy:
+    restart: on-failure
     networks:
       - subchat-internal
       - external # need to bind
@@ -70,6 +72,7 @@ services:
         target: /infrared/proxies
         read_only: true
   tg-bot:
+    restart: on-failure
     networks:
       - subchat-internal
       - external
@@ -87,3 +90,20 @@ services:
       - type: bind
         source: ${STORAGE_PATH:-storage}/bot-db
         target: /sqlite
+  subchat-site:
+    image: nginx:alpine
+    restart: on-failure
+    networks:
+      - subchat-internal
+      - external
+    ports:
+      - 8085:80
+    volumes:
+      - type: bind
+        source: ${CONFIGS_PATH:-server-configs}/nginx-site
+        target: /etc/nginx/conf.d
+        read_only: true
+      - type: bind
+        source: ${CONFIGS_PATH:-server-configs}/subchat-site
+        target: /usr/share/nginx/html
+        read_only: true

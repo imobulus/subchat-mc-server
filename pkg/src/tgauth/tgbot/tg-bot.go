@@ -321,12 +321,10 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 			return
 		}
 	}
-	defer func() {
-		err := bot.permsEngine.UpdateActorStatus(actor.ID, false)
-		if err != nil {
-			bot.HandleUpdateError(update, err)
-		}
-	}()
+	err = bot.permsEngine.UpdateActorStatus(actor.ID, false)
+	if err != nil {
+		bot.HandleUpdateError(update, err)
+	}
 	if chatHandler.currentHandler == nil {
 		handler := bot.getFirstHandler(actor, update)
 		if handler == nil {
