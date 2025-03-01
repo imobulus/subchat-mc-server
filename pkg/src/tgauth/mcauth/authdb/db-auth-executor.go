@@ -115,14 +115,14 @@ func (authdb *AuthDbExecutor) createTgUserWithActor(tguser tgbotapi.User) error 
 }
 
 // 0 duration means unlimited
-func (authdb *AuthDbExecutor) BanActor(actorId ActorId, duration time.Duration, reason string) {
+func (authdb *AuthDbExecutor) BanActor(actorId ActorId, duration time.Duration, reason string) error {
 	authdb.logger.Debug("banning actor", zap.Uint("actor_id", uint(actorId)), zap.Duration("duration", duration), zap.String("reason", reason))
 	ban := Ban{
 		ActorID:     actorId,
 		BanDuration: duration,
 		Reason:      reason,
 	}
-	authdb.db.Create(&ban)
+	return authdb.db.Create(&ban).Error
 }
 
 func (authdb *AuthDbExecutor) UnbanActor(actorId uint) {
@@ -290,6 +290,16 @@ func (authdb *AuthDbExecutor) VerifiedByAdmin(actorId ActorId, adminId ActorId) 
 		return errors.Wrap(err, "failed to get admin")
 	}
 	err = authdb.db.Model(&actor).Association("VerifiedByAdmins").Append(&admin)
+	if err != nil {
+		return errors.Wrap(err, "failed to update actor")
+	}
+	return nil
+}
+
+func (authdb *AuthDbExecutor) RejectAdminVerifications(actorId ActorId) error {
+	authdb.logger.Debug("rejecting admin verifications", zap.Uint("actor_id", uint(actorId)))
+	actor := Actor{ID: actorId}
+	err := authdb.db.Model(&actor).Association("VerifiedByAdmins").Clear()
 	if err != nil {
 		return errors.Wrap(err, "failed to update actor")
 	}

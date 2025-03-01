@@ -78,7 +78,7 @@ func (engine *ServerPermsEngine) IsAdmin(actorId authdb.ActorId) (bool, error) {
 
 }
 
-func (engine *ServerPermsEngine) CheckVerifyActorPermission(requestor authdb.ActorId) error {
+func (engine *ServerPermsEngine) CheckAdminPermission(requestor authdb.ActorId) error {
 	isAdmin, err := engine.IsAdmin(requestor)
 	if err != nil {
 		return errors.Wrap(err, "failed to check permission")
@@ -93,13 +93,43 @@ func (engine *ServerPermsEngine) AdminVerifyActor(
 	requestor authdb.ActorId,
 	actorId authdb.ActorId,
 ) error {
-	err := engine.CheckVerifyActorPermission(requestor)
+	err := engine.CheckAdminPermission(requestor)
 	if err != nil {
 		return errors.Wrap(err, "failed to check permission")
 	}
 	err = engine.dbExecutor.VerifiedByAdmin(actorId, requestor)
 	if err != nil {
 		return errors.Wrap(err, "failed to verify actor")
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) AdminRejectActor(
+	requestor authdb.ActorId,
+	actorId authdb.ActorId,
+) error {
+	err := engine.CheckAdminPermission(requestor)
+	if err != nil {
+		return errors.Wrap(err, "failed to check permission")
+	}
+	err = engine.dbExecutor.RejectAdminVerifications(actorId)
+	if err != nil {
+		return errors.Wrap(err, "failed to verify actor")
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) AdminBanActor(
+	requestor authdb.ActorId,
+	actorId authdb.ActorId,
+) error {
+	err := engine.CheckAdminPermission(requestor)
+	if err != nil {
+		return errors.Wrap(err, "failed to check permission")
+	}
+	err = engine.dbExecutor.BanActor(actorId, 0, "banned by admin")
+	if err != nil {
+		return errors.Wrap(err, "failed to block actor")
 	}
 	return nil
 }
