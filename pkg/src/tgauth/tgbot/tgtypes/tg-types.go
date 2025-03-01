@@ -3,9 +3,8 @@ package tgtypes
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -167,7 +166,7 @@ func NewAuxTgApi(api *tgbotapi.BotAPI, logger *zap.Logger) *AuxTgApi {
 }
 
 func (api *AuxTgApi) SetMyCommands(commands []BotCommand, scope *BotCommandScope, languageCode *string) error {
-	v := url.Values{}
+	v := tgbotapi.Params{}
 	if commands == nil {
 		commands = []BotCommand{}
 	}
@@ -175,16 +174,16 @@ func (api *AuxTgApi) SetMyCommands(commands []BotCommand, scope *BotCommandScope
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal commands")
 	}
-	v.Add("commands", string(commandsJSON))
+	v.AddNonEmpty("commands", string(commandsJSON))
 	if scope != nil {
 		scopeJSON, err := json.Marshal(scope)
 		if err != nil {
 			return errors.Wrap(err, "failed to marshal scope")
 		}
-		v.Add("scope", string(scopeJSON))
+		v.AddNonEmpty("scope", string(scopeJSON))
 	}
 	if languageCode != nil {
-		v.Add("language_code", *languageCode)
+		v.AddNonEmpty("language_code", *languageCode)
 	}
 	api.logger.Debug("setting commands", zap.Any("args", v))
 	resp, err := api.api.MakeRequest(methodSetMyCommands, v)
@@ -198,16 +197,16 @@ func (api *AuxTgApi) SetMyCommands(commands []BotCommand, scope *BotCommandScope
 }
 
 func (api *AuxTgApi) DeleteMyCommands(scope *BotCommandScope, languageCode *string) error {
-	v := url.Values{}
+	v := tgbotapi.Params{}
 	if scope != nil {
 		scopeJSON, err := json.Marshal(scope)
 		if err != nil {
 			return errors.Wrap(err, "failed to marshal scope")
 		}
-		v.Add("scope", string(scopeJSON))
+		v.AddNonEmpty("scope", string(scopeJSON))
 	}
 	if languageCode != nil {
-		v.Add("language_code", *languageCode)
+		v.AddNonEmpty("language_code", *languageCode)
 	}
 	api.logger.Debug("deleting commands", zap.Any("args", v))
 	resp, err := api.api.MakeRequest(methodSetMyCommands, v)
@@ -221,9 +220,9 @@ func (api *AuxTgApi) DeleteMyCommands(scope *BotCommandScope, languageCode *stri
 }
 
 func (api *AuxTgApi) SetReaction(chatId authdb.TgChatId, messageId int64, emoji string) error {
-	params := url.Values{}
-	params.Add("chat_id", fmt.Sprintf("%d", chatId))
-	params.Add("message_id", fmt.Sprintf("%d", messageId))
+	params := tgbotapi.Params{}
+	params.AddNonEmpty("chat_id", fmt.Sprintf("%d", chatId))
+	params.AddNonEmpty("message_id", fmt.Sprintf("%d", messageId))
 	emojiJson, err := json.Marshal([]struct {
 		Type  string `json:"type"`
 		Emoji string `json:"emoji"`
@@ -231,7 +230,7 @@ func (api *AuxTgApi) SetReaction(chatId authdb.TgChatId, messageId int64, emoji 
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal emoji")
 	}
-	params.Add("reaction", string(emojiJson))
+	params.AddNonEmpty("reaction", string(emojiJson))
 	resp, err := api.api.MakeRequest("setMessageReaction", params)
 	if err != nil {
 		return errors.Wrap(err, "failed to set reaction")

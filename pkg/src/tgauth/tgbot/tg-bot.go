@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"
@@ -112,7 +112,8 @@ func (bot *TgBot) Run() error {
 		return err
 	}
 	bot.runWhitelistSetter()
-	return bot.runUpdatesLoop()
+	bot.runUpdatesLoop()
+	return nil
 }
 
 func (bot *TgBot) Done() <-chan struct{} {
@@ -154,14 +155,11 @@ func (bot *TgBot) setWhitelist() {
 	}
 }
 
-func (bot *TgBot) runUpdatesLoop() error {
+func (bot *TgBot) runUpdatesLoop() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	updates, err := bot.api.GetUpdatesChan(u)
-	if err != nil {
-		return err
-	}
+	updates := bot.api.GetUpdatesChan(u)
 
 	updatesProxy := make(chan tgbotapi.Update)
 	go func() {
@@ -190,7 +188,6 @@ func (bot *TgBot) runUpdatesLoop() error {
 		bot.wg.Wait()
 		close(bot.doneC)
 	}()
-	return nil
 }
 
 func (bot *TgBot) handleUpdate(update tgbotapi.Update) {

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"
 	"gorm.io/gorm"
@@ -37,7 +37,7 @@ func (handler *CommonAdminHandler) promptForConfirmation(update *tgbotapi.Update
 
 func getUserDescriptionForAdmin(actor *authdb.Actor) string {
 	descBuilder := strings.Builder{}
-	descBuilder.WriteString(fmt.Sprintf("Пользователь %s %s:\n", actor.Nickname, actor.Description))
+	descBuilder.WriteString(fmt.Sprintf("Пользователь %d:\n", actor.ID))
 	for _, tgAcc := range actor.TgAccounts {
 		additions := []string{}
 		if tgAcc.LastSeenInfo.UserName != "" {
@@ -49,8 +49,9 @@ func getUserDescriptionForAdmin(actor *authdb.Actor) string {
 		if tgAcc.LastSeenInfo.LastName != "" {
 			additions = append(additions, tgAcc.LastSeenInfo.LastName)
 		}
-		descBuilder.WriteString(fmt.Sprintf("Tg %d", tgAcc.ID))
+		descBuilder.WriteString(fmt.Sprintf("Tg `%d`", tgAcc.ID))
 		if len(additions) > 0 {
+			descBuilder.WriteString(" ")
 			descBuilder.WriteString(strings.Join(additions, " "))
 		}
 	}
@@ -301,7 +302,7 @@ func (handler *ListUsersHandler) sendUsersList(update *tgbotapi.Update) (bool, e
 			break
 		}
 		responseBuilder.WriteString(getUserDescriptionForAdmin(&user))
-		responseBuilder.WriteString("\n")
+		responseBuilder.WriteString("\n\n")
 	}
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, responseBuilder.String())
 	_, err := handler.h.bot.api.Send(msg)

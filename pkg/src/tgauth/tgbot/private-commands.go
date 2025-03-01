@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
 	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"

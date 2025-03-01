@@ -3,7 +3,7 @@ package tgbot
 import (
 	"errors"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/permsengine"
 	"github.com/imobulus/subchat-mc-server/src/tgauth/tgbot/tgtypes"

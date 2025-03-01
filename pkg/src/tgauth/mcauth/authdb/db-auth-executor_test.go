@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/imobulus/subchat-mc-server/src/mojang"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
