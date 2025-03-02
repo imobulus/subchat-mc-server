@@ -57,6 +57,16 @@ func getUserDescriptionForAdmin(actor *authdb.Actor) string {
 			descBuilder.WriteString(strings.Join(additions, " "))
 		}
 	}
+	if len(actor.MinecraftAccounts) > 0 {
+		descBuilder.WriteString("\n")
+		descBuilder.WriteString("Mc: ")
+		for i, mcAcc := range actor.MinecraftAccounts {
+			descBuilder.WriteString(fmt.Sprintf("<code>%s</code>", mcAcc.ID))
+			if i < len(actor.MinecraftAccounts)-1 {
+				descBuilder.WriteString(" ")
+			}
+		}
+	}
 	return descBuilder.String()
 }
 
