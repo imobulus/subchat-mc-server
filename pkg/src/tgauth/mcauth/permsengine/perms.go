@@ -56,10 +56,11 @@ func NewServerPermsEngine(
 		adminTags[tag] = struct{}{}
 	}
 	return &ServerPermsEngine{
-		config:     config,
-		dbExecutor: dbExecutor,
-		adminTags:  adminTags,
-		random:     rand.New(rand.NewSource(time.Now().UnixNano())),
+		config:         config,
+		dbExecutor:     dbExecutor,
+		adminTags:      adminTags,
+		random:         rand.New(rand.NewSource(time.Now().UnixNano())),
+		accessPassword: accessPassword,
 	}, nil
 }
 
