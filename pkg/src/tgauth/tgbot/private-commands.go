@@ -96,11 +96,7 @@ type MyMinecraftLoginsHandler struct {
 }
 
 func (bot *TgBot) needToVerifyDisclaimer() string {
-	return fmt.Sprintf(
-		"Мне надо увидеть вас в чате прежде чем вы сможете зарегистрировать аккаунт. "+
-			"Используйте /imhere@%s в сабчате или в чате тг-канала сервера",
-		bot.api.Self.UserName,
-	)
+	return "У вас ещё нет доступа. Используйте /access чтобы получить доступ к серверу."
 }
 
 func (handler *MyMinecraftLoginsHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
@@ -487,7 +483,7 @@ func (handler *AccessHandler) InitialHandle(update *tgbotapi.Update, actor *auth
 		handler.bot.SendLog(msg)
 		return nil, nil
 	}
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите пароль для доступа")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите пароль для доступа. Если не знаете пароль спросите его в сабчате или у @imobulus")
 	handler.bot.SendLog(msg)
 	return handler, nil
 }
