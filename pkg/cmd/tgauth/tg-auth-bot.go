@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"os"
 	"os/signal"
@@ -27,7 +28,7 @@ type Config struct {
 
 var DefaultConfig = Config{
 	TgBot:           tgbot.DefaultTgBotConfig,
-	TgBotSecretPath: "/run/secrets/tg-bot.json",
+	TgBotSecretPath: "/run/secrets/tgbot-secret",
 	AuthDbConfig:    authdb.DefaultAuthDbExecutorConfig,
 	Perms:           permsengine.DefaultServerPermsEngineConfig,
 	SqliteLocation:  "/sqlite/auth.db",
@@ -70,7 +71,7 @@ func main() {
 	if err != nil {
 		logger.Fatal("failed to read tg secret file", zap.Error(err))
 	}
-	err = yaml.Unmarshal(secretContents, &tgSecret)
+	err = json.Unmarshal(secretContents, &tgSecret)
 	if err != nil {
 		logger.Fatal("failed to parse tg secret file", zap.Error(err))
 	}
