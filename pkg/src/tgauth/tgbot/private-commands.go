@@ -15,8 +15,8 @@ import (
 )
 
 type PrivateChatHandler struct {
-	lastActor      *authdb.Actor
-	bot            *TgBot
+	lastActor *authdb.Actor
+	bot       *TgBot
 }
 
 func NewPrivateChatHandler(bot *TgBot, initialActor *authdb.Actor) *PrivateChatHandler {
@@ -36,10 +36,6 @@ func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update, actor 
 }
 
 func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
-	// if update.Message.Text == handler.accessPassword {
-	// 	handler.bot.permsEngine.
-	// 	return nil, nil
-	// }
 	command := update.Message.Command()
 	switch command {
 	case "my_minecraft_logins":
@@ -50,6 +46,8 @@ func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *
 		return &RevokeMinecraftLoginHandler{bot: handler.bot}, nil
 	case "newpassword":
 		return &NewPasswordHandler{bot: handler.bot}, nil
+	case "access":
+		return &AccessHandler{bot: handler.bot}, nil
 	default:
 		if handler.IsLastAdmin() {
 			switch command {
@@ -475,5 +473,47 @@ func (handler *NewPasswordHandler) GetHelpDescription() string {
 	return "Сейчас вы генерируете новый пароль для аккаунта"
 }
 func (handler *NewPasswordHandler) GetBot() *TgBot {
+	return handler.bot
+}
+
+type AccessHandler struct {
+	bot *TgBot
+}
+
+func (handler *AccessHandler) InitialHandle(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	if actor.Accepted {
+		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Вы уже получили доступ")
+		handler.bot.SendLog(msg)
+		return nil, nil
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Введите пароль для доступа")
+	handler.bot.SendLog(msg)
+	return handler, nil
+}
+
+func (handler *AccessHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	err := handler.bot.permsEngine.HandleAccessPassword(actor.ID, update.Message.Text)
+	if err != nil {
+		if errors.Is(err, permsengine.ErrorWrongAccessPassword{}) {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Неверный пароль, попробуйте еще раз или используйте /abort")
+			handler.bot.SendLog(msg)
+			return handler, nil
+		}
+		return handler, err
+	}
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Доступ получен")
+	handler.bot.SendLog(msg)
+	return nil, nil
+}
+
+func (handler *AccessHandler) GetCommands() []tgtypes.BotCommand {
+	return nil
+}
+
+func (handler *AccessHandler) GetHelpDescription() string {
+	return "Сейчас вы получаете доступ к серверу"
+}
+
+func (handler *AccessHandler) GetBot() *TgBot {
 	return handler.bot
 }
