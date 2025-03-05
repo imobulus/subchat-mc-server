@@ -71,6 +71,7 @@ func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 		{Command: "add_minecraft_login", Description: "Зарегистрировать аккаунт на сервере"},
 		{Command: "remove_minecraft_login", Description: "Удалить аккаунт с сервера"},
 		{Command: "newpassword", Description: "Сгенерировать новый пароль для аккаунта"},
+		{Command: "access", Description: "Получить доступ к серверу"},
 	}
 	if handler.IsLastAdmin() {
 		commands = append(commands, []tgtypes.BotCommand{
