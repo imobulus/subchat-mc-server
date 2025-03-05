@@ -26,10 +26,11 @@ var DefaultServerPermsEngineConfig = ServerPermsEngineConfig{
 }
 
 type ServerPermsEngine struct {
-	config     ServerPermsEngineConfig
-	dbExecutor *authdb.AuthDbExecutor
-	adminTags  map[string]struct{}
-	random     *rand.Rand
+	config         ServerPermsEngineConfig
+	dbExecutor     *authdb.AuthDbExecutor
+	adminTags      map[string]struct{}
+	random         *rand.Rand
+	accessPassword string
 }
 
 type ErrorAdminPermissionDenied struct {
@@ -45,7 +46,11 @@ func (e ErrorAdminPermissionDenied) Is(target error) bool {
 	return ok
 }
 
-func NewServerPermsEngine(config ServerPermsEngineConfig, dbExecutor *authdb.AuthDbExecutor) (*ServerPermsEngine, error) {
+func NewServerPermsEngine(
+	config ServerPermsEngineConfig,
+	dbExecutor *authdb.AuthDbExecutor,
+	accessPassword string,
+) (*ServerPermsEngine, error) {
 	adminTags := map[string]struct{}{}
 	for _, tag := range config.AdminTags {
 		adminTags[tag] = struct{}{}
@@ -146,6 +151,36 @@ func (engine *ServerPermsEngine) AdminListAllUsers(
 		return nil, errors.Wrap(err, "failed to get all actors")
 	}
 	return actors, nil
+}
+
+type ErrorWrongAccessPassword struct{}
+
+func (e ErrorWrongAccessPassword) Error() string {
+	return "wrong access password"
+}
+
+func (e ErrorWrongAccessPassword) Is(target error) bool {
+	_, ok := target.(ErrorWrongAccessPassword)
+	return ok
+}
+
+func (engine *ServerPermsEngine) CheckAccessPassword(pass string) error {
+	if pass != engine.accessPassword {
+		return ErrorWrongAccessPassword{}
+	}
+	return nil
+}
+
+func (engine *ServerPermsEngine) HandleAccessPassword(actorId authdb.ActorId, pass string) error {
+	err := engine.CheckAccessPassword(pass)
+	if err != nil {
+		return errors.Wrap(err, "failed to check access password")
+	}
+	err = engine.dbExecutor.EnteredCorrectPassword(actorId)
+	if err != nil {
+		return errors.Wrap(err, "failed to enter correct password")
+	}
+	return nil
 }
 
 func (engine *ServerPermsEngine) SeenInChat(
@@ -345,6 +380,9 @@ func (engine *ServerPermsEngine) RevokeMinecraftLogin(
 
 func (engine *ServerPermsEngine) computeActorAcceptedStatus(actor *authdb.Actor) bool {
 	if actor.IsAdmin {
+		return true
+	}
+	if actor.EnteredAccessPass {
 		return true
 	}
 	for _, maybeAdmin := range actor.VerifiedByAdmins {

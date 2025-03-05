@@ -60,12 +60,14 @@ var DefaultTgBotConfig = TgBotConfig{
 }
 
 type TgBotSecret struct {
-	Token string `json:"token"`
+	Token          string `json:"token"`
+	AccessPassword string `json:"access_password"`
 }
 
 type TgBot struct {
-	api *tgbotapi.BotAPI
-	aux *tgtypes.AuxTgApi
+	api    *tgbotapi.BotAPI
+	aux    *tgtypes.AuxTgApi
+	secret TgBotSecret
 
 	chatHandlersMap map[InteractiveSessionId]*ChatHandler
 	chatHandlersMx  *sync.Mutex
@@ -94,6 +96,7 @@ func NewTgBot(
 	tgBot := TgBot{
 		api:             api,
 		aux:             tgtypes.NewAuxTgApi(api, logger),
+		secret:          secret,
 		chatHandlersMap: make(map[InteractiveSessionId]*ChatHandler),
 		chatHandlersMx:  &sync.Mutex{},
 		permsEngine:     permsEngine,
@@ -325,6 +328,12 @@ func (bot *TgBot) handleChatMessageUpdate(chatHandler *ChatHandler, update *tgbo
 	if err != nil {
 		bot.HandleUpdateError(update, err)
 	}
+	defer func() {
+		err := bot.permsEngine.UpdateActorStatus(actor.ID, false)
+		if err != nil {
+			bot.HandleUpdateError(update, err)
+		}
+	}()
 	if chatHandler.currentHandler == nil {
 		handler := bot.getFirstHandler(actor, update)
 		if handler == nil {

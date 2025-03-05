@@ -87,7 +87,7 @@ func main() {
 		logger.Fatal("Failed to init db", zap.Error(err))
 	}
 
-	permsEngine, err := permsengine.NewServerPermsEngine(config.Perms, dbExec)
+	permsEngine, err := permsengine.NewServerPermsEngine(config.Perms, dbExec, tgSecret.AccessPassword)
 	if err != nil {
 		logger.Fatal("Failed to create perms engine", zap.Error(err))
 	}

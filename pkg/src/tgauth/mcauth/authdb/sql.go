@@ -43,6 +43,7 @@ type Actor struct {
 	Description       string
 	IsAdmin           bool
 	Accepted          bool
+	EnteredAccessPass bool
 	AcceptedLastTime  time.Time
 	SeenInChats       []TgChat `gorm:"many2many:actors_seen_in_chats"`
 	VerifiedByAdmins  []*Actor `gorm:"many2many:actors_verified_by_admins"`

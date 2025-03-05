@@ -438,3 +438,13 @@ func (authdb *AuthDbExecutor) ApproveChat(chatId TgChatId, actorId ActorId) erro
 	}
 	return nil
 }
+
+func (authdb *AuthDbExecutor) EnteredCorrectPassword(actorId ActorId) error {
+	authdb.logger.Debug("setting entered correct password", zap.Uint("actor_id", uint(actorId)))
+	actor := Actor{ID: actorId, EnteredAccessPass: true}
+	err := authdb.db.Model(&actor).Updates(actor).Error
+	if err != nil {
+		return errors.Wrapf(err, "fail to set entered password %d", actorId)
+	}
+	return nil
+}

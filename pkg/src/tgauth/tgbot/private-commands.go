@@ -15,8 +15,8 @@ import (
 )
 
 type PrivateChatHandler struct {
-	lastActor *authdb.Actor
-	bot       *TgBot
+	lastActor      *authdb.Actor
+	bot            *TgBot
 }
 
 func NewPrivateChatHandler(bot *TgBot, initialActor *authdb.Actor) *PrivateChatHandler {
@@ -36,6 +36,10 @@ func (handler *PrivateChatHandler) InitialHandle(update *tgbotapi.Update, actor 
 }
 
 func (handler *PrivateChatHandler) HandleUpdate(update *tgbotapi.Update, actor *authdb.Actor) (InteractiveHandler, error) {
+	// if update.Message.Text == handler.accessPassword {
+	// 	handler.bot.permsEngine.
+	// 	return nil, nil
+	// }
 	command := update.Message.Command()
 	switch command {
 	case "my_minecraft_logins":
@@ -73,7 +77,8 @@ func (handler *PrivateChatHandler) GetCommands() []tgtypes.BotCommand {
 	if handler.IsLastAdmin() {
 		commands = append(commands, []tgtypes.BotCommand{
 			{Command: "approve_user", Description: "Одобрить пользователя"},
-			{Command: "disapprove_user", Description: "Отклонить пользователя"},
+			{Command: "reject_user", Description: "Отклонить пользователя"},
+			{Command: "ban_user", Description: "Забанить пользователя"},
 			{Command: "list_users", Description: "Список пользователей"},
 		}...)
 	}
@@ -394,7 +399,7 @@ func (handler *RevokeMinecraftLoginHandler) GetCommands() []tgtypes.BotCommand {
 	return nil
 }
 func (handler *RevokeMinecraftLoginHandler) GetHelpDescription() string {
-	return "Сейчас вы удаляете аккакнт с сервера"
+	return "Сейчас вы удаляете аккаунт с сервера"
 }
 func (handler *RevokeMinecraftLoginHandler) GetBot() *TgBot {
 	return handler.bot
