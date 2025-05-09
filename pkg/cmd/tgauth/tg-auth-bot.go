@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"path"
 	"syscall"
 
 	"github.com/imobulus/subchat-mc-server/src/tgauth/mcauth/authdb"
@@ -76,6 +77,10 @@ func main() {
 		logger.Fatal("failed to parse tg secret file", zap.Error(err))
 	}
 
+	err = os.MkdirAll(path.Dir(config.SqliteLocation), 0755)
+	if err != nil {
+		logger.Fatal("failed to create sqlite directory", zap.Error(err))
+	}
 	db, err := gorm.Open(sqlite.Open(config.SqliteLocation), &gorm.Config{
 		TranslateError: true,
 	})
